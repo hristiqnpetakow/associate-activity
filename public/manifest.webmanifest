@@ -1,0 +1,11 @@
+{
+  "name": "Асоциации • Activity",
+  "short_name": "Асоциации",
+  "description": "Realtime party game за компании.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7fb",
+  "theme_color": "#141522",
+  "lang": "bg",
+  "icons": [{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

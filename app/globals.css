@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f7f7fb;
+  --fg: #141522;
+  --muted: #6f7283;
+  --card: rgba(255, 255, 255, 0.86);
+  --border: rgba(20, 21, 34, 0.08);
+}
+
+* { box-sizing: border-box; }
+html { min-height: 100%; }
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(99,102,241,.16), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(244,63,94,.12), transparent 28%),
+    var(--bg);
+  color: var(--fg);
+  font-family: Arial, Helvetica, sans-serif;
+}
+button, input { font: inherit; }
+button { cursor: pointer; }
+
+.glass {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 70px rgba(31, 35, 56, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.grid-bg {
+  background-image: linear-gradient(rgba(20,21,34,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(20,21,34,.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.pulse-soft { animation: pulseSoft 1.8s ease-in-out infinite; }
+@keyframes pulseSoft { 0%,100%{opacity:1} 50%{opacity:.64} }
+
+.pop-in { animation: popIn .25s ease-out both; }
+@keyframes popIn { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity:1; transform:none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+}
+html[data-theme="dark"] body {
+  --bg: #0e1020;
+  --fg: #f7f7fb;
+  --muted: #a8adbf;
+  --card: rgba(26, 29, 48, 0.82);
+  --border: rgba(255,255,255,.09);
+  background:
+    radial-gradient(circle at top left, rgba(99,102,241,.20), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(244,63,94,.16), transparent 28%),
+    var(--bg);
+}
+html[data-theme="dark"] .bg-white\/70,
+html[data-theme="dark"] .bg-white\/75,
+html[data-theme="dark"] .bg-white { background-color: rgba(28,31,52,.78) !important; }
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-gray-600 { color: #a8adbf !important; }
+html[data-theme="dark"] .border-black\/10 { border-color: rgba(255,255,255,.10) !important; }
+html[data-theme="dark"] .text-black { color: #fff !important; }
+html[data-theme="dark"] .bg-black { background-color: #fff !important; color: #111 !important; }

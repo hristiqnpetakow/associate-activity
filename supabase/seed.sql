@@ -1,0 +1,1 @@
+-- No seed rows are required. Players provide their own words when a game starts.
