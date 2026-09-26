@@ -224,22 +224,13 @@ export default function GamePage() {
   async function pass() {
     if (!state || !game || !team || !state.currentCard || busy || !isExplainer) return;
 
-    // Ако сме се върнали към вече пасувана дума, повторният ПАС
-    // НЕ харчи нов пас. Думата остава в passedDeck и теглим нова
-    // от основното тесте, ако има такава.
+    // Ако сме се върнали към вече пасувана дума, можем да продължим към
+    // нова дума само докато има останали неизползвани пасове. Самият пас
+    // тук НЕ харчи нов пас — той само оставя картата в passedDeck и тегли
+    // следваща карта от основното тесте. След като трите паса са изчерпани,
+    // трябва да познаем текущата пасувана дума, за да отключим нова карта.
     if (state.currentCardSource === 'passed') {
-      if (state.deck.length === 0) {
-        const anotherPassed = state.passedDeck.find((card) => card.id !== state.currentCard?.id) ?? null;
-        await persist({
-          ...state,
-          currentCard: anotherPassed ?? state.currentCard,
-          currentCardSource: 'passed',
-          lastEvent: anotherPassed
-            ? `${team.name} остави пасуваната дума и премина към друга пасувана дума`
-            : `${team.name} остави пасуваната дума — няма останали нови думи`,
-        });
-        return;
-      }
+      if (state.passesRemaining <= 0 || state.deck.length === 0) return;
 
       setBusy(true);
       setError('');
@@ -249,7 +240,7 @@ export default function GamePage() {
         await persist({
           ...state,
           deck: nextDeck,
-          // Текущата дума вече е в passedDeck и остава там.
+          // Текущата дума остава в passedDeck.
           passedDeck: state.passedDeck,
           currentCard: nextCard,
           currentCardSource: nextCard ? 'deck' : 'passed',
@@ -343,6 +334,7 @@ export default function GamePage() {
   const guesser = players.find((p) => p.id === currentRole?.guesserId);
   const passedWords = state.passedDeck;
   const canChoosePassed = true;
+  const canDrawNewFromPassed = state.currentCardSource === 'passed' && state.passesRemaining > 0 && state.deck.length > 0;
   const nextTeam = state.teams.find((t) => t.id === state.teamOrder[(state.currentTeamIndex + 1) % state.teamOrder.length]);
 
   return (
@@ -401,8 +393,18 @@ export default function GamePage() {
               </div>
 
               <div className="relative z-10 mt-5 grid grid-cols-2 gap-3">
-                <button onClick={pass} disabled={!isExplainer || busy || (state.passesRemaining <= 0 && state.currentCardSource !== 'passed') || state.gameStatus !== 'PLAYING'} className="game-action secondary disabled:opacity-35">
-                  <span className="text-2xl">⏭️</span><span>{state.currentCardSource === 'passed' ? 'НОВА ДУМА' : 'ПАС'}</span><small>{state.currentCardSource === 'passed' ? 'не харчи пас' : `${state.passesRemaining} оставащи`}</small>
+                <button
+                  onClick={pass}
+                  disabled={!isExplainer || busy || (state.currentCardSource === 'passed' ? !canDrawNewFromPassed : state.passesRemaining <= 0) || state.gameStatus !== 'PLAYING'}
+                  className="game-action secondary disabled:opacity-35"
+                >
+                  <span className="text-2xl">⏭️</span>
+                  <span>{state.currentCardSource === 'passed' ? 'НОВА ДУМА' : 'ПАС'}</span>
+                  <small>
+                    {state.currentCardSource === 'passed'
+                      ? (canDrawNewFromPassed ? 'не харчи пас' : 'първо познай пасувана')
+                      : `${state.passesRemaining} оставащи`}
+                  </small>
                 </button>
                 <button onClick={correct} disabled={!isExplainer || busy || state.gameStatus !== 'PLAYING'} className="game-action primary disabled:opacity-35">
                   <span className="text-2xl">✅</span><span>ПОЗНАТА!</span><small>{state.currentCardSource === 'passed' ? '→ тегли нова' : '+1 точка'}</small>
@@ -418,7 +420,7 @@ export default function GamePage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex items-center gap-2 font-black text-lg"><RotateCcw size={18} /> Пасувани думи <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{passedWords.length}</span></div>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">Избери по всяко време пасувана карта и реши дали да я познаеш или да я оставиш в паса и да изтеглиш нова.</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">Избери по всяко време пасувана карта. Ако имаш оставащ пас, можеш да я оставиш в паса и да изтеглиш нова; след 3 паса трябва да познаеш пасувана карта, за да продължиш.</p>
                   </div>
                   <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">Можеш да се връщаш към тях винаги</span>
                 </div>
