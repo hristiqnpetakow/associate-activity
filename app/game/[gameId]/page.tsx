@@ -179,7 +179,7 @@ export default function GamePage() {
         passedDeck: picked.passedDeck,
         currentCard: picked.card,
         currentCardSource: picked.source,
-        lastEvent: `${team.name} позна! +1`,
+        lastEvent: `${team.name} позна! +1` ,
       };
 
       if (!picked.card) {
@@ -222,62 +222,71 @@ export default function GamePage() {
   }
 
   async function pass() {
-    if (
-      !state ||
-      !game ||
-      !team ||
-      !state.currentCard ||
-      busy ||
-      !isExplainer
-    ) return;
+    if (!state || !game || !team || !state.currentCard || busy || !isExplainer) return;
 
-    setBusy(true);
-    setError('');
-
-    try {
-      const currentCard = state.currentCard;
-
-      // Ако сме върху вече пасувана дума:
-      // не харчим нов пас, а просто продължаваме към
-      // нова дума от основното тесте.
-      if (state.currentCardSource === 'passed') {
-        const nextDeck = [...state.deck];
-
-        if (nextDeck.length > 0) {
-          const nextCard = nextDeck.pop() ?? null;
-
-          await persist({
-            ...state,
-            deck: nextDeck,
-            // passedDeck НЕ се променя
-            currentCard: nextCard,
-            currentCardSource: nextCard ? 'deck' : 'passed',
-            lastEvent: `${team.name} пропусна пасувана дума и продължи напред`,
-          });
-        }
-
+    // Ако сме се върнали към вече пасувана дума, повторният ПАС
+    // НЕ харчи нов пас. Думата остава в passedDeck и теглим нова
+    // от основното тесте, ако има такава.
+    if (state.currentCardSource === 'passed') {
+      if (state.deck.length === 0) {
+        const anotherPassed = state.passedDeck.find((card) => card.id !== state.currentCard?.id) ?? null;
+        await persist({
+          ...state,
+          currentCard: anotherPassed ?? state.currentCard,
+          currentCardSource: 'passed',
+          lastEvent: anotherPassed
+            ? `${team.name} остави пасуваната дума и премина към друга пасувана дума`
+            : `${team.name} остави пасуваната дума — няма останали нови думи`,
+        });
         return;
       }
 
-      if (state.passesRemaining <= 0) return;
+      setBusy(true);
+      setError('');
+      try {
+        const nextDeck = [...state.deck];
+        const nextCard = nextDeck.pop() ?? null;
+        await persist({
+          ...state,
+          deck: nextDeck,
+          // Текущата дума вече е в passedDeck и остава там.
+          passedDeck: state.passedDeck,
+          currentCard: nextCard,
+          currentCardSource: nextCard ? 'deck' : 'passed',
+          // НЕ намаляваме passesRemaining.
+          passesRemaining: state.passesRemaining,
+          lastEvent: `${team.name} остави пасуваната дума и изтегли нова`,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Неуспешно теглене на нова дума.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
 
-      const nextDeck = state.deck.filter((card) => card.id !== currentCard.id);
-      const nextPassed = [currentCard, ...state.passedDeck];
+    // Нормален ПАС на нова дума — тук се използва един от 3-те паса.
+    if (state.passesRemaining <= 0) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      const nextPassed = [state.currentCard, ...state.passedDeck];
       const remainingPasses = state.passesRemaining - 1;
-
+      const nextDeck = [...state.deck];
       const nextCard = nextDeck.pop() ?? null;
 
+      // Ако има нова дума, продължаваме напред.
+      // Ако няма, показваме една от пасуваните думи.
+      const fallbackPassed = nextPassed[0] ?? null;
       await persist({
         ...state,
         deck: nextDeck,
         passedDeck: nextPassed,
-        currentCard: nextCard ?? nextPassed[0] ?? null,
-        currentCardSource: nextCard ? 'deck' : 'passed',
+        currentCard: nextCard ?? fallbackPassed,
+        currentCardSource: nextCard ? 'deck' : (fallbackPassed ? 'passed' : null),
         passesRemaining: remainingPasses,
-        lastEvent:
-          remainingPasses > 0
-            ? `${team.name} пасува`
-            : `${team.name} използва последния пас`,
+        lastEvent: `${team.name} пасува`,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Неуспешен пас.');
@@ -288,12 +297,9 @@ export default function GamePage() {
 
   async function pickPassedCard(cardId: string) {
     if (!state || !game || busy || !isExplainer) return;
-
     const card = state.passedDeck.find((item) => item.id === cardId);
     if (!card) return;
-
     setBusy(true);
-
     try {
       await persist({
         ...state,
@@ -302,11 +308,7 @@ export default function GamePage() {
         lastEvent: `Върната е пасувана дума: ${card.text}`,
       });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Не успяхме да изберем пасуваната дума.'
-      );
+      setError(err instanceof Error ? err.message : 'Не успяхме да изберем пасуваната дума.');
     } finally {
       setBusy(false);
     }
@@ -399,13 +401,8 @@ export default function GamePage() {
               </div>
 
               <div className="relative z-10 mt-5 grid grid-cols-2 gap-3">
-                <button onClick={pass} disabled={
-                  !isExplainer ||
-                  busy ||
-                  (state.passesRemaining <= 0 && state.currentCardSource !== 'passed') ||
-                  state.gameStatus !== 'PLAYING'
-                } className="game-action secondary disabled:opacity-35">
-                  <span className="text-2xl">⏭️</span><span>ПАС</span><small>{state.passesRemaining} оставащи</small>
+                <button onClick={pass} disabled={!isExplainer || busy || (state.passesRemaining <= 0 && state.currentCardSource !== 'passed') || state.gameStatus !== 'PLAYING'} className="game-action secondary disabled:opacity-35">
+                  <span className="text-2xl">⏭️</span><span>{state.currentCardSource === 'passed' ? 'НОВА ДУМА' : 'ПАС'}</span><small>{state.currentCardSource === 'passed' ? 'не харчи пас' : `${state.passesRemaining} оставащи`}</small>
                 </button>
                 <button onClick={correct} disabled={!isExplainer || busy || state.gameStatus !== 'PLAYING'} className="game-action primary disabled:opacity-35">
                   <span className="text-2xl">✅</span><span>ПОЗНАТА!</span><small>{state.currentCardSource === 'passed' ? '→ тегли нова' : '+1 точка'}</small>
@@ -421,16 +418,16 @@ export default function GamePage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex items-center gap-2 font-black text-lg"><RotateCcw size={18} /> Пасувани думи <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{passedWords.length}</span></div>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">{canChoosePassed ? 'Избери която и да е карта и продължете с обяснението.' : 'Тези карти са запазени. След 3 паса можете да се върнете към тях.'}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">Избери по всяко време пасувана карта и реши дали да я познаеш или да я оставиш в паса и да изтеглиш нова.</p>
                   </div>
-                  {canChoosePassed && <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">Няма нови думи → играете тези</span>}
+                  <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">Можеш да се връщаш към тях винаги</span>
                 </div>
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
                   {passedWords.map((card) => (
                     <button
                       key={card.id}
                       onClick={() => pickPassedCard(card.id)}
-                      disabled={!canChoosePassed || busy}
+                      disabled={busy}
                       className={`passed-card ${state.currentCard?.id === card.id ? 'active' : ''} ${canChoosePassed ? 'clickable' : ''}`}
                     >
                       <span>{card.text}</span>
