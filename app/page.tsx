@@ -28,7 +28,7 @@ export default function HomePage() {
               <div className="text-sm font-bold text-gray-500">Рунд 2 · Отбор Сини</div>
               <div className="rounded-full bg-rose-50 px-3 py-1 text-sm font-black text-rose-600">0:47</div>
             </div>
-            <div className="rounded-[2rem] bg-gradient-to-br from-indigo-500 to-fuchsia-500 p-8 text-center text-white shadow-xl">
+            <div className="rounded-[2rem] bg-gradient-to-br from-violet-600 via-fuchsia-500 to-orange-400 p-8 text-center text-white shadow-xl">
               <div className="text-xs font-bold uppercase tracking-[.25em] opacity-80">Една дума</div>
               <div className="mt-4 text-5xl font-black">ПАНДА</div>
               <div className="mt-7 grid grid-cols-2 gap-3"><button className="rounded-2xl bg-white/15 px-4 py-3 font-bold backdrop-blur">⏭ Пас</button><button className="rounded-2xl bg-white px-4 py-3 font-black text-indigo-700">✅ Позната</button></div>

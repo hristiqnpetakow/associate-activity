@@ -63,3 +63,59 @@ html[data-theme="dark"] .text-gray-600 { color: #a8adbf !important; }
 html[data-theme="dark"] .border-black\/10 { border-color: rgba(255,255,255,.10) !important; }
 html[data-theme="dark"] .text-black { color: #fff !important; }
 html[data-theme="dark"] .bg-black { background-color: #fff !important; color: #111 !important; }
+
+/* Party-game visual system */
+.party-page {
+  position: relative;
+  background:
+    radial-gradient(circle at 15% 8%, rgba(124, 58, 237, .18), transparent 25%),
+    radial-gradient(circle at 85% 12%, rgba(236, 72, 153, .16), transparent 24%),
+    radial-gradient(circle at 50% 95%, rgba(14, 165, 233, .13), transparent 28%),
+    var(--bg);
+}
+.party-blob { position: absolute; border-radius: 999px; filter: blur(45px); pointer-events: none; opacity: .52; }
+.blob-one { width: 180px; height: 180px; background: #8b5cf6; top: 9%; left: -50px; }
+.blob-two { width: 220px; height: 220px; background: #ec4899; top: 32%; right: -80px; }
+.blob-three { width: 190px; height: 190px; background: #06b6d4; bottom: -30px; left: 35%; }
+.brand-mark { display:grid; place-items:center; width:42px; height:42px; border-radius:15px; color:white; background:linear-gradient(135deg,#7c3aed,#ec4899 60%,#f97316); box-shadow:0 12px 30px rgba(124,58,237,.28); transition:transform .2s ease; }
+.group:hover .brand-mark { transform:rotate(-6deg) scale(1.05); }
+.brand-dot { color:#ec4899; }
+.icon-button { display:grid; place-items:center; width:42px; height:42px; border-radius:14px; border:1px solid var(--border); background:rgba(255,255,255,.66); box-shadow:0 10px 30px rgba(20,21,34,.08); backdrop-filter:blur(14px); transition:transform .18s ease, box-shadow .18s ease; }
+.icon-button:hover { transform:translateY(-2px) rotate(1deg); box-shadow:0 14px 35px rgba(20,21,34,.14); }
+.game-title { background:linear-gradient(90deg,#171827 0%,#6d28d9 42%,#db2777 78%,#ea580c 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.game-chip { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .7rem; border-radius:999px; border:1px solid var(--border); background:rgba(255,255,255,.68); box-shadow:0 8px 26px rgba(20,21,34,.06); }
+.game-stat { display:flex; align-items:center; gap:.55rem; border:1px solid var(--border); border-radius:18px; padding:.72rem .9rem; background:rgba(255,255,255,.6); box-shadow:0 10px 30px rgba(20,21,34,.05); font-size:.82rem; font-weight:800; color:var(--muted); }
+.game-stat strong { margin-left:auto; color:var(--fg); font-size:1.05rem; font-variant-numeric:tabular-nums; }
+.game-showcase { position:relative; overflow:hidden; border-radius:2.3rem; padding:1rem; color:#fff; background:linear-gradient(135deg,#5b21b6 0%,#7c3aed 35%,#db2777 72%,#f97316 100%); box-shadow:0 34px 90px rgba(91,33,182,.28); }
+.game-showcase::before { content:""; position:absolute; inset:1px; border-radius:2.25rem; background:linear-gradient(180deg,rgba(255,255,255,.08),transparent 35%); pointer-events:none; }
+.game-showcase.timer-danger { animation:dangerGlow 1s ease-in-out infinite alternate; }
+@keyframes dangerGlow { from { box-shadow:0 34px 90px rgba(91,33,182,.28); } to { box-shadow:0 34px 100px rgba(244,63,94,.48); } }
+.showcase-kicker { font-size:.68rem; font-weight:900; letter-spacing:.24em; opacity:.72; }
+.timer-orb { min-width:104px; min-height:64px; display:grid; place-items:center; padding:.4rem .9rem; border-radius:22px; background:rgba(12,8,39,.28); border:1px solid rgba(255,255,255,.16); box-shadow:inset 0 0 30px rgba(255,255,255,.05), 0 12px 35px rgba(0,0,0,.18); backdrop-filter:blur(14px); }
+.timer-orb span { font-size:2.2rem; line-height:1; font-weight:1000; font-variant-numeric:tabular-nums; letter-spacing:-.04em; }
+.timer-orb.danger { background:rgba(244,63,94,.38); }
+.word-display { font-size:clamp(2.6rem,7vw,6rem); font-weight:1000; line-height:.92; letter-spacing:-.05em; }
+.game-action { min-height:88px; display:grid; place-items:center; align-content:center; gap:.12rem; border-radius:20px; transition:transform .18s ease, filter .18s ease, box-shadow .18s ease; box-shadow:0 16px 34px rgba(0,0,0,.18); }
+.game-action:hover:not(:disabled) { transform:translateY(-3px) scale(1.01); filter:saturate(1.08); }
+.game-action span { font-size:1.1rem; font-weight:1000; letter-spacing:.02em; }
+.game-action small { font-size:.7rem; font-weight:900; opacity:.7; }
+.game-action.secondary { color:#fff; background:rgba(7,5,25,.34); border:1px solid rgba(255,255,255,.14); backdrop-filter:blur(12px); }
+.game-action.primary { color:#17111f; background:linear-gradient(135deg,#fff,#fef3c7); }
+.status-pill { display:inline-flex; align-items:center; gap:.4rem; border-radius:999px; background:rgba(20,21,34,.055); border:1px solid rgba(20,21,34,.055); padding:.5rem .72rem; }
+.passed-card { position:relative; flex:0 0 auto; width:170px; min-height:92px; border-radius:18px; padding:1rem; text-align:left; font-weight:1000; background:linear-gradient(135deg,rgba(124,58,237,.10),rgba(236,72,153,.12)); border:1px solid rgba(124,58,237,.12); transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease; }
+.passed-card.clickable { cursor:pointer; }
+.passed-card.clickable:hover { transform:translateY(-3px); border-color:rgba(124,58,237,.35); box-shadow:0 14px 35px rgba(124,58,237,.14); }
+.passed-card:disabled { cursor:default; opacity:.86; }
+.passed-card.active { border-color:rgba(124,58,237,.65); box-shadow:0 0 0 3px rgba(124,58,237,.12); }
+html[data-theme="dark"] .game-stat, html[data-theme="dark"] .game-chip, html[data-theme="dark"] .icon-button, html[data-theme="dark"] .passed-card { background:rgba(30,34,58,.72); }
+html[data-theme="dark"] .game-stat strong { color:#fff; }
+html[data-theme="dark"] .status-pill { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.08); }
+html[data-theme="dark"] .passed-card { border-color:rgba(167,139,250,.16); }
+html[data-theme="dark"] .word-display { color:#0f1120; }
+@media (max-width: 640px) {
+  .game-showcase { border-radius:1.8rem; padding:.72rem; }
+  .game-showcase::before { border-radius:1.75rem; }
+  .timer-orb { min-width:92px; min-height:56px; border-radius:18px; }
+  .timer-orb span { font-size:1.8rem; }
+  .game-action { min-height:78px; }
+}

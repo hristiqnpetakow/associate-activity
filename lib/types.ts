@@ -26,6 +26,8 @@ export type Card = {
   category: string;
 };
 
+export type CardSource = 'deck' | 'passed' | null;
+
 export type Team = {
   id: string;
   name: string;
@@ -44,6 +46,7 @@ export type GameState = {
   teamOrder: string[];
   currentTeamIndex: number;
   currentCard: Card | null;
+  currentCardSource?: CardSource;
   deck: Card[];
   passedDeck: Card[];
   allCards: Card[];

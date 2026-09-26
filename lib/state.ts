@@ -67,6 +67,7 @@ export function buildGameState(room: Room, players: Player[]): GameState {
     teamOrder: teams.map((team) => team.id),
     currentTeamIndex: 0,
     currentCard,
+    currentCardSource: currentCard ? 'deck' : null,
     deck,
     passedDeck: [],
     allCards,
@@ -85,14 +86,28 @@ export function buildGameState(room: Room, players: Player[]): GameState {
 export function beginNextTurn(state: GameState, bonusTimeSeconds = 0): GameState {
   const team = state.teams.find((item) => item.id === state.teamOrder[state.currentTeamIndex]);
   if (!team) return state;
+
   team.turnNumber += 1;
   const seconds = 60 + bonusTimeSeconds;
   const now = Date.now();
+  const currentId = state.currentCard?.id;
+  const currentIsAlreadyPassed = Boolean(currentId && state.passedDeck.some((card) => card.id === currentId));
+  const recycledCards = [
+    ...state.deck,
+    ...state.passedDeck,
+    ...(state.currentCard && !currentIsAlreadyPassed ? [state.currentCard] : []),
+  ];
+  const deck = shuffle(recycledCards);
+  const currentCard = deck.pop() ?? null;
+
   return {
     ...state,
     gameStatus: 'PLAYING',
     passesRemaining: 3,
-    currentCard: drawCard(state),
+    currentCard,
+    currentCardSource: currentCard ? 'deck' : null,
+    deck,
+    passedDeck: [],
     turnStartedAt: new Date(now).toISOString(),
     endAt: new Date(now + seconds * 1000).toISOString(),
     pausedRemainingMs: null,
@@ -104,6 +119,20 @@ export function drawCard(state: GameState) {
   if (state.deck.length > 0) return state.deck[state.deck.length - 1];
   if (state.passedDeck.length > 0) return state.passedDeck[state.passedDeck.length - 1];
   return null;
+}
+
+export function drawFromDeck(deck: Card[]) {
+  if (deck.length === 0) return { deck, card: null as Card | null };
+  const nextDeck = [...deck];
+  const card = nextDeck.pop() ?? null;
+  return { deck: nextDeck, card };
+}
+
+export function drawFromPassedDeck(passedDeck: Card[]) {
+  if (passedDeck.length === 0) return { passedDeck, card: null as Card | null };
+  const nextPassedDeck = [...passedDeck];
+  const card = nextPassedDeck[nextPassedDeck.length - 1] ?? null;
+  return { passedDeck: nextPassedDeck, card };
 }
 
 export function removeCurrentCard(state: GameState): GameState {

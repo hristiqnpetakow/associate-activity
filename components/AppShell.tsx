@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Moon, Sun, Sparkles } from 'lucide-react';
+import { Moon, Sparkles, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -21,17 +21,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <main className="min-h-screen grid-bg">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-black tracking-tight">
-          <span className="grid h-10 w-10 place-items-center rounded-2xl bg-black text-white shadow-lg"><Sparkles size={19} /></span>
-          <span>Асоциации</span>
+    <main className="party-page min-h-screen overflow-hidden">
+      <div className="party-blob blob-one" />
+      <div className="party-blob blob-two" />
+      <div className="party-blob blob-three" />
+      <header className="relative z-20 mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+        <Link href="/" className="group flex items-center gap-3">
+          <span className="brand-mark"><Sparkles size={18} /></span>
+          <span className="text-lg font-black tracking-tight">Асоциации<span className="brand-dot">.</span></span>
         </Link>
-        <button onClick={toggle} aria-label="Смени тема" className="grid h-10 w-10 place-items-center rounded-full border border-black/10 bg-white/70 backdrop-blur transition hover:scale-105">
+        <button onClick={toggle} aria-label="Смени тема" className="icon-button">
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </header>
-      {children}
+      <div className="relative z-10">{children}</div>
     </main>
   );
 }
