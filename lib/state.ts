@@ -11,25 +11,67 @@ const TEAM_PALETTE = [
   'from-pink-500 to-rose-500',
 ];
 
+const TEAM_LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З'];
+
+export function requiredTeamCount(total: number, maxSize: 2 | 3) {
+  return Math.max(1, Math.ceil(total / maxSize));
+}
+
+export function teamKeys(total: number, maxSize: 2 | 3) {
+  return Array.from({ length: requiredTeamCount(total, maxSize) }, (_, index) => `team-${index + 1}`);
+}
+
+export function teamLabel(index: number) {
+  return `Отбор ${TEAM_LETTERS[index] ?? index + 1}`;
+}
+
+export function areManualTeamsBalanced(players: Player[], room: Room) {
+  const keys = teamKeys(players.length, room.team_size);
+  const counts = keys.map((key) => players.filter((player) => player.team_choice === key).length);
+  if (counts.some((count) => count === 0)) return false;
+  return Math.max(...counts) - Math.min(...counts) <= 1;
+}
+
 function balancedSizes(total: number, maxSize: 2 | 3) {
-  const teamCount = Math.max(1, Math.ceil(total / maxSize));
+  const teamCount = requiredTeamCount(total, maxSize);
   const base = Math.floor(total / teamCount);
   const extra = total % teamCount;
   return Array.from({ length: teamCount }, (_, index) => base + (index < extra ? 1 : 0));
 }
 
-export function buildGameState(room: Room, players: Player[]): GameState {
+function buildTeams(room: Room, players: Player[]) {
+  const teams: Team[] = [];
+
+  if ((room.team_assignment_mode ?? 'RANDOM') === 'MANUAL') {
+    const keys = teamKeys(players.length, room.team_size);
+    if (!areManualTeamsBalanced(players, room)) {
+      throw new Error('Разпредели всички играчи равномерно по отборите преди да започнете.');
+    }
+
+    keys.forEach((key, index) => {
+      const teamPlayers = players.filter((player) => player.team_choice === key);
+      teams.push({
+        id: crypto.randomUUID(),
+        name: teamLabel(index),
+        color: TEAM_PALETTE[index % TEAM_PALETTE.length],
+        playerIds: teamPlayers.map((player) => player.id),
+        score: 0,
+        roundScores: { '1': 0, '2': 0, '3': 0 },
+        turnNumber: 0,
+      });
+    });
+    return teams;
+  }
+
   const shuffledPlayers = shuffle(players);
   const sizes = balancedSizes(players.length, room.team_size);
-  const teams: Team[] = [];
   let cursor = 0;
-
   sizes.forEach((size, index) => {
     const teamPlayers = shuffledPlayers.slice(cursor, cursor + size);
     cursor += size;
     teams.push({
       id: crypto.randomUUID(),
-      name: `Отбор ${index + 1}`,
+      name: teamLabel(index),
       color: TEAM_PALETTE[index % TEAM_PALETTE.length],
       playerIds: teamPlayers.map((player) => player.id),
       score: 0,
@@ -37,6 +79,11 @@ export function buildGameState(room: Room, players: Player[]): GameState {
       turnNumber: 0,
     });
   });
+  return teams;
+}
+
+export function buildGameState(room: Room, players: Player[]): GameState {
+  const teams = buildTeams(room, players);
 
   const categoryMap: [keyof NonNullable<Player['words']>, string][] = [
     ['предмети', 'Предмет'],
@@ -60,8 +107,9 @@ export function buildGameState(room: Room, players: Player[]): GameState {
   const firstRole = firstTeam ? roleForTeam(firstTeam, firstTeam.turnNumber) : { explainerId: '', guesserId: '' };
 
   return {
-    version: 1,
+    version: 2,
     gameStatus: 'PLAYING',
+    phase: 'TURN_ACTIVE',
     round: 1,
     teams,
     teamOrder: teams.map((team) => team.id),
@@ -76,6 +124,7 @@ export function buildGameState(room: Room, players: Player[]): GameState {
     endAt: new Date(now + initialSeconds * 1000).toISOString(),
     pausedRemainingMs: null,
     bonusTimeSeconds: 0,
+    bonusTeamId: null,
     soundOn: true,
     lastEvent: firstRole.explainerId ? `Започва ${firstTeam?.name}` : null,
     roundStartedAt: new Date(now).toISOString(),
@@ -102,6 +151,7 @@ export function beginNextTurn(state: GameState, bonusTimeSeconds = 0): GameState
 
   return {
     ...state,
+    phase: 'TURN_ACTIVE',
     gameStatus: 'PLAYING',
     passesRemaining: 3,
     currentCard,
@@ -115,24 +165,45 @@ export function beginNextTurn(state: GameState, bonusTimeSeconds = 0): GameState
   };
 }
 
+export function beginNextRound(state: GameState): GameState {
+  const nextRound = (state.round + 1) as 1 | 2 | 3;
+  const newDeck = shuffle([...state.allCards]);
+  const first = newDeck.pop() ?? null;
+  const now = Date.now();
+  const bonusSeconds = Math.max(0, state.bonusTimeSeconds);
+  const bonusTeamIndex = state.bonusTeamId
+    ? state.teamOrder.indexOf(state.bonusTeamId)
+    : -1;
+  const currentTeamIndex = bonusSeconds > 0 && bonusTeamIndex >= 0 ? bonusTeamIndex : 0;
+  const duration = 60 + bonusSeconds;
+
+  return {
+    ...state,
+    phase: 'TURN_ACTIVE',
+    gameStatus: 'PLAYING',
+    round: nextRound,
+    currentTeamIndex,
+    deck: newDeck,
+    passedDeck: [],
+    currentCard: first,
+    currentCardSource: first ? 'deck' : null,
+    passesRemaining: 3,
+    turnStartedAt: new Date(now).toISOString(),
+    endAt: new Date(now + duration * 1000).toISOString(),
+    pausedRemainingMs: null,
+    bonusTimeSeconds: 0,
+    bonusTeamId: null,
+    roundStartedAt: new Date(now).toISOString(),
+    lastEvent: bonusSeconds > 0
+      ? `🚀 Започва Рунд ${nextRound} с ${duration} секунди за ${state.teams[bonusTeamIndex]?.name ?? 'отбора'}.`
+      : `🚀 Започва Рунд ${nextRound}`,
+  };
+}
+
 export function drawCard(state: GameState) {
   if (state.deck.length > 0) return state.deck[state.deck.length - 1];
   if (state.passedDeck.length > 0) return state.passedDeck[state.passedDeck.length - 1];
   return null;
-}
-
-export function drawFromDeck(deck: Card[]) {
-  if (deck.length === 0) return { deck, card: null as Card | null };
-  const nextDeck = [...deck];
-  const card = nextDeck.pop() ?? null;
-  return { deck: nextDeck, card };
-}
-
-export function drawFromPassedDeck(passedDeck: Card[]) {
-  if (passedDeck.length === 0) return { passedDeck, card: null as Card | null };
-  const nextPassedDeck = [...passedDeck];
-  const card = nextPassedDeck[nextPassedDeck.length - 1] ?? null;
-  return { passedDeck: nextPassedDeck, card };
 }
 
 export function removeCurrentCard(state: GameState): GameState {

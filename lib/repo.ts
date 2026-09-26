@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { ensureAnonymousSession } from './auth';
-import type { GameRow, GameState, Player, Room, WordInput } from './types';
+import type { GameRow, GameState, Player, Room, TeamAssignmentMode, WordInput } from './types';
 
 export async function getSessionUserId() {
   const session = await ensureAnonymousSession();
@@ -13,13 +13,13 @@ function friendlyError(error: { message: string }) {
   return error.message;
 }
 
-export async function createRoom(name: string, teamSize: 2 | 3) {
+export async function createRoom(name: string, teamSize: 2 | 3, teamAssignmentMode: TeamAssignmentMode = 'RANDOM') {
   const userId = await getSessionUserId();
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const code = Math.random().toString(36).slice(2, 8).toUpperCase();
     const { data: room, error } = await supabase
       .from('rooms')
-      .insert({ code, host_user_id: userId, team_size: teamSize, status: 'LOBBY' })
+      .insert({ code, host_user_id: userId, team_size: teamSize, team_assignment_mode: teamAssignmentMode, status: 'LOBBY' })
       .select('*')
       .single();
     if (!error && room) {
@@ -71,6 +71,17 @@ export async function loadRoom(roomId: string) {
 export async function submitWords(roomId: string, words: WordInput) {
   const userId = await getSessionUserId();
   const { error } = await supabase.from('players').update({ words, ready: true, last_seen_at: new Date().toISOString() }).eq('room_id', roomId).eq('user_id', userId);
+  if (error) throw new Error(error.message);
+}
+
+
+export async function setTeamChoice(roomId: string, teamChoice: string | null) {
+  const userId = await getSessionUserId();
+  const { error } = await supabase
+    .from('players')
+    .update({ team_choice: teamChoice, last_seen_at: new Date().toISOString() })
+    .eq('room_id', roomId)
+    .eq('user_id', userId);
   if (error) throw new Error(error.message);
 }
 

@@ -5,6 +5,7 @@ create table if not exists public.rooms (
   code text not null unique check (code ~ '^[A-Z0-9]{6}$'),
   host_user_id uuid not null references auth.users(id) on delete restrict,
   team_size smallint not null check (team_size in (2, 3)),
+  team_assignment_mode text not null default 'RANDOM' check (team_assignment_mode in ('RANDOM', 'MANUAL')),
   status text not null default 'LOBBY' check (status in ('LOBBY', 'WORD_INPUT', 'PLAYING', 'PAUSED', 'FINISHED')),
   game_id uuid,
   created_at timestamptz not null default now()
@@ -18,6 +19,7 @@ create table if not exists public.players (
   is_host boolean not null default false,
   ready boolean not null default false,
   words jsonb,
+  team_choice text,
   joined_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
   unique(room_id, user_id),

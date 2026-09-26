@@ -1,5 +1,7 @@
 export type Round = 1 | 2 | 3;
 export type GameStatus = 'LOBBY' | 'WORD_INPUT' | 'PLAYING' | 'PAUSED' | 'FINISHED';
+export type GamePhase = 'TURN_ACTIVE' | 'TURN_ENDED' | 'ROUND_ENDED';
+export type TeamAssignmentMode = 'RANDOM' | 'MANUAL';
 
 export type Player = {
   id: string;
@@ -9,6 +11,7 @@ export type Player = {
   is_host: boolean;
   ready: boolean;
   words: WordInput | null;
+  team_choice: string | null;
   joined_at: string;
   last_seen_at: string;
 };
@@ -41,6 +44,7 @@ export type Team = {
 export type GameState = {
   version: number;
   gameStatus: GameStatus;
+  phase: GamePhase;
   round: Round;
   teams: Team[];
   teamOrder: string[];
@@ -55,6 +59,7 @@ export type GameState = {
   endAt: string | null;
   pausedRemainingMs: number | null;
   bonusTimeSeconds: number;
+  bonusTeamId?: string | null;
   soundOn: boolean;
   lastEvent: string | null;
   roundStartedAt: string | null;
@@ -75,6 +80,7 @@ export type Room = {
   code: string;
   host_user_id: string;
   team_size: 2 | 3;
+  team_assignment_mode: TeamAssignmentMode;
   status: GameStatus;
   game_id: string | null;
   created_at: string;

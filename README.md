@@ -57,3 +57,11 @@ npm start
 ## Важно за production
 
 Този MVP използва server-readable JSON game snapshot за бърза realtime синхронизация. За публично production приложение с конкурентна игра и anti-cheat изисквания се препоръчва game actions да се преместят в Postgres RPC/Edge Functions с optimistic concurrency / version checks.
+
+## Team assignment update
+
+For an existing Supabase project, run `supabase/migrations/002_team_assignment.sql` once in the Supabase SQL Editor. It adds manual team selection without changing the existing game tables.
+
+The lobby now supports random or manual team assignment. In manual mode players can join the available teams before the host starts the game.
+
+During a turn, only the explainer sees the current card and passed cards in the UI. When the timer ends, the game waits for the host to press **Следващ отбор**. When a round ends, it waits for **Следващ рунд**.

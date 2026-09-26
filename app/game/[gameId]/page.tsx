@@ -7,7 +7,7 @@ import { AppShell } from '@/components/AppShell';
 import { ensureAnonymousSession } from '@/lib/auth';
 import { roleForTeam } from '@/lib/game';
 import { loadGame, loadPlayers, loadRoom, saveGameState } from '@/lib/repo';
-import { beginNextTurn } from '@/lib/state';
+import { beginNextRound, beginNextTurn } from '@/lib/state';
 import { supabase } from '@/lib/supabase';
 import type { Card, GameRow, GameState, Player } from '@/lib/types';
 import { formatTime } from '@/lib/utils';
@@ -82,8 +82,10 @@ export default function GamePage() {
   const isExplainer = Boolean(currentRole?.explainerId && players.find((p) => p.id === currentRole.explainerId)?.user_id === userId);
   const meName = players.find((p) => p.user_id === userId)?.name ?? '';
 
+  const phase = state?.phase ?? 'TURN_ACTIVE';
+
   useEffect(() => {
-    if (!state?.endAt || state.gameStatus !== 'PLAYING') {
+    if (!state?.endAt || state.gameStatus !== 'PLAYING' || phase !== 'TURN_ACTIVE') {
       setSeconds(state?.pausedRemainingMs ? Math.ceil(state.pausedRemainingMs / 1000) : 0);
       return;
     }
@@ -91,14 +93,14 @@ export default function GamePage() {
     tick();
     const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [state?.endAt, state?.gameStatus, state?.pausedRemainingMs]);
+  }, [state?.endAt, state?.gameStatus, state?.pausedRemainingMs, phase]);
 
   useEffect(() => {
-    if (state?.gameStatus === 'PLAYING' && seconds === 0 && state.endAt && !busy) {
-      void timeoutTurn();
+    if (state?.gameStatus === 'PLAYING' && phase === 'TURN_ACTIVE' && seconds === 0 && state.endAt && !busy) {
+      void markTurnEnded();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seconds]);
+  }, [seconds, phase]);
 
   function beep() {
     if (!state?.soundOn) return;
@@ -122,17 +124,48 @@ export default function GamePage() {
     setGame(saved);
   }
 
-  async function timeoutTurn() {
-    if (!state || !game || state.gameStatus !== 'PLAYING' || !team || (state.endAt && Date.now() < new Date(state.endAt).getTime())) return;
+  async function markTurnEnded() {
+    if (!state || !game || state.gameStatus !== 'PLAYING' || phase !== 'TURN_ACTIVE' || busy) return;
     setBusy(true);
     beep();
     try {
+      await persist({
+        ...state,
+        phase: 'TURN_ENDED',
+        endAt: null,
+        pausedRemainingMs: null,
+        lastEvent: `⏰ Времето на ${team?.name ?? 'отбора'} изтече.`,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Неуспешно приключване на хода.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function goToNextTeam() {
+    if (!state || !game || !team || phase !== 'TURN_ENDED' || room?.host_user_id !== userId || busy) return;
+    setBusy(true);
+    setError('');
+    try {
       const nextIndex = (state.currentTeamIndex + 1) % state.teamOrder.length;
       const nextState: GameState = { ...state, currentTeamIndex: nextIndex };
-      const continued = beginNextTurn(nextState, state.bonusTimeSeconds);
-      await persist(continued);
+      await persist(beginNextTurn(nextState, state.bonusTimeSeconds));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Неуспешно преминаване към следващия ход.');
+      setError(err instanceof Error ? err.message : 'Неуспешно преминаване към следващия отбор.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function goToNextRound() {
+    if (!state || !game || phase !== 'ROUND_ENDED' || state.round >= 3 || room?.host_user_id !== userId || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await persist(beginNextRound(state));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Неуспешно преминаване към следващия рунд.');
     } finally {
       setBusy(false);
     }
@@ -151,9 +184,9 @@ export default function GamePage() {
   }
 
   async function correct() {
-    if (!state || !game || !team || !state.currentCard || busy || !isExplainer) return;
+    if (!state || !game || !team || !state.currentCard || busy || !isExplainer || phase !== 'TURN_ACTIVE') return;
     if (state.endAt && Date.now() >= new Date(state.endAt).getTime()) {
-      await timeoutTurn();
+      await markTurnEnded();
       return;
     }
 
@@ -197,30 +230,24 @@ export default function GamePage() {
         const bonus = state.endAt ? Math.max(0, Math.ceil((new Date(state.endAt).getTime() - Date.now()) / 1000)) : 0;
         if (state.round < 3) {
           const nextRound = (state.round + 1) as 1 | 2 | 3;
-          const newDeck = [...state.allCards].sort(() => Math.random() - 0.5);
-          const first = newDeck.pop() ?? null;
-          const now = Date.now();
-          const duration = 60 + bonus;
-          const next: GameState = {
+          await persist({
             ...nextBase,
-            round: nextRound,
-            currentTeamIndex: 0,
-            deck: newDeck,
+            phase: 'ROUND_ENDED',
+            currentCard: null,
+            currentCardSource: null,
+            deck: [],
             passedDeck: [],
-            currentCard: first,
-            currentCardSource: first ? 'deck' : null,
-            passesRemaining: 3,
-            bonusTimeSeconds: bonus,
-            turnStartedAt: new Date(now).toISOString(),
-            endAt: new Date(now + duration * 1000).toISOString(),
+            endAt: null,
             pausedRemainingMs: null,
-            roundStartedAt: new Date(now).toISOString(),
-            lastEvent: `🎉 Рунд ${state.round} приключи! Следва Рунд ${nextRound}`,
-          };
-          await persist(next);
+            bonusTimeSeconds: bonus,
+            bonusTeamId: bonus > 0 ? team.id : null,
+            lastEvent: bonus > 0
+              ? `🎉 Рунд ${state.round} приключи! ${team.name} печели ${bonus} сек. бонус за първия си ход в Рунд ${nextRound}.`
+              : `🎉 Рунд ${state.round} приключи! Следва Рунд ${nextRound}`,
+          });
         } else {
           const winner = [...teams].sort((a, b) => b.score - a.score)[0];
-          await persist({ ...nextBase, gameStatus: 'FINISHED', endAt: null, winnerTeamId: winner?.id ?? null, lastEvent: '🏆 Играта приключи!' });
+          await persist({ ...nextBase, phase: 'ROUND_ENDED', gameStatus: 'FINISHED', endAt: null, winnerTeamId: winner?.id ?? null, lastEvent: '🏆 Играта приключи!' });
         }
       } else {
         await persist(nextBase);
@@ -233,7 +260,7 @@ export default function GamePage() {
   }
 
   async function pass() {
-    if (!state || !game || !team || !state.currentCard || busy || !isExplainer) return;
+    if (!state || !game || !team || !state.currentCard || busy || !isExplainer || phase !== 'TURN_ACTIVE') return;
 
     // Ако сме се върнали към вече пасувана дума, можем да продължим към
     // нова дума, без да харчим нов пас, но само ако имаме свободен пас-слот.
@@ -275,10 +302,7 @@ export default function GamePage() {
       const nextPassed = [state.currentCard, ...state.passedDeck].slice(0, 3);
       const remainingPasses = state.passesRemaining - 1;
       const nextDeck = [...state.deck];
-      const nextCard = nextDeck.pop() ?? null;
-
-      // Ако има нова дума, продължаваме напред.
-      // Ако няма, показваме една от пасуваните думи.
+      const nextCard = remainingPasses > 0 ? (nextDeck.pop() ?? null) : null;
       const fallbackPassed = nextPassed[0] ?? null;
       await persist({
         ...state,
@@ -287,7 +311,9 @@ export default function GamePage() {
         currentCard: nextCard ?? fallbackPassed,
         currentCardSource: nextCard ? 'deck' : (fallbackPassed ? 'passed' : null),
         passesRemaining: remainingPasses,
-        lastEvent: `${team.name} пасува`,
+        lastEvent: remainingPasses === 0
+          ? `${team.name} използва третия пас — играе с пасуваните думи`
+          : `${team.name} пасува`,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Неуспешен пас.');
@@ -297,7 +323,7 @@ export default function GamePage() {
   }
 
   async function pickPassedCard(cardId: string) {
-    if (!state || !game || busy || !isExplainer) return;
+    if (!state || !game || busy || !isExplainer || phase !== 'TURN_ACTIVE') return;
     const card = state.passedDeck.find((item) => item.id === cardId);
     if (!card) return;
     setBusy(true);
@@ -316,7 +342,7 @@ export default function GamePage() {
   }
 
   async function togglePause() {
-    if (!state || !room || userId !== room.host_user_id || busy) return;
+    if (!state || !room || userId !== room.host_user_id || busy || (phase !== 'TURN_ACTIVE' && state.gameStatus !== 'PAUSED')) return;
     setBusy(true);
     try {
       if (state.gameStatus === 'PAUSED') {
@@ -338,13 +364,16 @@ export default function GamePage() {
     return <AppShell><div className="mx-auto max-w-xl px-4 py-20 text-center"><div className="glass rounded-[2rem] p-7">{error ? <div className="font-bold text-rose-600">{error}</div> : <div className="font-bold">Зареждаме играта…</div>}</div></div></AppShell>;
   }
 
-  const timerDanger = seconds <= 10;
+  const mePlayer = players.find((p) => p.user_id === userId);
+  const isCurrentTeam = Boolean(mePlayer && team.playerIds.includes(mePlayer.id));
+  const showSecretWords = Boolean(isExplainer);
+  const timerDanger = seconds <= 10 && phase === 'TURN_ACTIVE';
   const ranking = [...state.teams].sort((a, b) => b.score - a.score);
   const explainer = players.find((p) => p.id === currentRole?.explainerId);
   const guesser = players.find((p) => p.id === currentRole?.guesserId);
   const passedWords = state.passedDeck;
-  const canChoosePassed = true;
-  const canDrawNewFromPassed = state.currentCardSource === 'passed' && state.passesRemaining > 0 && state.deck.length > 0;
+  const canChoosePassed = isExplainer && phase === 'TURN_ACTIVE';
+  const canDrawNewFromPassed = isExplainer && phase === 'TURN_ACTIVE' && state.currentCardSource === 'passed' && state.passesRemaining > 0 && state.deck.length > 0;
   const nextTeam = state.teams.find((t) => t.id === state.teamOrder[(state.currentTeamIndex + 1) % state.teamOrder.length]);
 
   return (
@@ -393,39 +422,75 @@ export default function GamePage() {
                     <WandSparkles size={14} /> {state.currentCardSource === 'passed' ? 'ПАСУВАНА ДУМА' : state.round === 3 ? 'ПОКАЖИ С ЯЗИКА НА ТЯЛОТО' : 'ПОЗНАЙ ДУМАТА'}
                   </div>
                   <div className="mt-7 min-h-28 grid place-items-center sm:min-h-36">
-                    <div className="word-display break-words">{state.currentCard?.text ?? 'Няма карта'}</div>
+                    {phase === 'TURN_ENDED' ? (
+                      <div className="text-center">
+                        <div className="text-5xl">⏰</div>
+                        <div className="mt-3 text-3xl font-black text-slate-950">Времето изтече!</div>
+                        <div className="mt-1 font-bold text-slate-500">Изчакайте домакина да пусне следващия отбор.</div>
+                      </div>
+                    ) : phase === 'ROUND_ENDED' ? (
+                      <div className="text-center">
+                        <div className="text-5xl">🎉</div>
+                        <div className="mt-3 text-3xl font-black text-slate-950">Рунд {state.round} приключи!</div>
+                        <div className="mt-1 font-bold text-slate-500">Бонус време: {state.bonusTimeSeconds} сек. само за първия ход</div>
+                      </div>
+                    ) : showSecretWords ? (
+                      <div className="word-display break-words">{state.currentCard?.text ?? 'Няма карта'}</div>
+                    ) : (
+                      <div className="max-w-xl text-center">
+                        <div className="text-5xl">🙈</div>
+                        <div className="mt-4 text-2xl font-black text-slate-950">Думата е скрита</div>
+                        <div className="mt-2 font-bold text-slate-500">{isCurrentTeam ? 'Ти си в играещия отбор, но си познаващият. Обяснителят вижда думата.' : 'Друг отбор играе — думите и пасовете са скрити.'}</div>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-6 text-sm font-bold leading-6 text-slate-500 sm:text-base">
+                  {phase === 'TURN_ACTIVE' && showSecretWords && <div className="mt-6 text-sm font-bold leading-6 text-slate-500 sm:text-base">
                     {state.round === 1 ? 'Обяснявай свободно, но без самата дума и нейни производни.' : state.round === 2 ? 'Само една подсказваща дума. Без изречения.' : 'Без думи и звуци — само жестове, мимики и пантомима.'}
-                  </div>
-                  {state.currentCardSource === 'passed' && <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-800">↩️ Връщаме се към пасувана дума</div>}
+                  </div>}
+                  {phase === 'TURN_ACTIVE' && showSecretWords && state.currentCardSource === 'passed' && <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-800">↩️ Върната пасувана дума</div>}
                 </div>
               </div>
 
-              <div className="relative z-10 mt-5 grid grid-cols-2 gap-3">
-                <button
-                  onClick={pass}
-                  disabled={!isExplainer || busy || (state.currentCardSource === 'passed' ? !canDrawNewFromPassed : state.passesRemaining <= 0) || state.gameStatus !== 'PLAYING'}
-                  className="game-action secondary disabled:opacity-35"
-                >
-                  <span className="text-2xl">⏭️</span>
-                  <span>{state.currentCardSource === 'passed' ? 'НОВА ДУМА' : 'ПАС'}</span>
-                  <small>
-                    {state.currentCardSource === 'passed'
-                      ? (canDrawNewFromPassed ? 'не харчи пас' : 'първо познай пасувана')
-                      : `${state.passesRemaining} оставащи`}
-                  </small>
-                </button>
-                <button onClick={correct} disabled={!isExplainer || busy || state.gameStatus !== 'PLAYING'} className="game-action primary disabled:opacity-35">
-                  <span className="text-2xl">✅</span><span>ПОЗНАТА!</span><small>{state.currentCardSource === 'passed' ? '→ тегли нова' : '+1 точка'}</small>
-                </button>
-              </div>
+              {phase === 'TURN_ACTIVE' && (
+                <div className="relative z-10 mt-5 grid grid-cols-2 gap-3">
+                  <button
+                    onClick={pass}
+                    disabled={!isExplainer || busy || (state.currentCardSource === 'passed' ? !canDrawNewFromPassed : state.passesRemaining <= 0) || state.gameStatus !== 'PLAYING'}
+                    className="game-action secondary disabled:opacity-35"
+                  >
+                    <span className="text-2xl">⏭️</span>
+                    <span>{state.currentCardSource === 'passed' ? 'НОВА ДУМА' : 'ПАС'}</span>
+                    <small>{state.currentCardSource === 'passed' ? (canDrawNewFromPassed ? 'не харчи пас' : 'първо познай пасувана') : `${state.passesRemaining} оставащи`}</small>
+                  </button>
+                  <button onClick={correct} disabled={!isExplainer || busy || state.gameStatus !== 'PLAYING'} className="game-action primary disabled:opacity-35">
+                    <span className="text-2xl">✅</span><span>ПОЗНАТА!</span><small>{state.currentCardSource === 'passed' ? '→ +1 пас и нова' : '+1 точка'}</small>
+                  </button>
+                </div>
+              )}
 
-              {!isExplainer && <div className="relative z-10 mt-4 flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-center text-sm font-black text-white ring-1 ring-white/10">🎯 Ти си познаващият — гледай думата и помагай с реакциите!</div>}
+              {phase === 'TURN_ENDED' && (
+                <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-white"><div className="font-black text-lg">Следва {nextTeam?.name ?? '—'}</div><div className="text-sm font-semibold text-white/70">Следващият ход започва след натискане на бутона.</div></div>
+                    <button onClick={goToNextTeam} disabled={room.host_user_id !== userId || busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><ChevronRight size={18}/>{room.host_user_id === userId ? 'Следващ отбор' : 'Домакинът избира'}</button>
+                  </div>
+                </div>
+              )}
+
+              {phase === 'ROUND_ENDED' && (
+                <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-white"><div className="font-black text-lg">Следва Рунд {Math.min(3, state.round + 1)}</div><div className="text-sm font-semibold text-white/70">{state.bonusTimeSeconds > 0 ? `${team.name} получава ${state.bonusTimeSeconds} сек. бонус само за първия си ход.` : 'Всеки ход започва с 60 секунди.'}</div></div>
+                    <button onClick={goToNextRound} disabled={room.host_user_id !== userId || busy || state.round >= 3} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{room.host_user_id === userId ? 'Следващ рунд' : 'Домакинът избира'}</button>
+                  </div>
+                </div>
+              )}
+
+              {!isExplainer && phase === 'TURN_ACTIVE' && <div className="relative z-10 mt-4 flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-center text-sm font-black text-white ring-1 ring-white/10">🎯 Думата е скрита за теб — само обяснителят я вижда.</div>}
               {state.gameStatus === 'PAUSED' && <div className="relative z-10 mt-4 rounded-2xl bg-amber-300 px-4 py-3 text-center font-black text-amber-950">⏸ Играта е на пауза</div>}
             </div>
 
-            {passedWords.length > 0 && (
+            {isExplainer && passedWords.length > 0 && (
               <div className={`glass rounded-[2rem] p-4 sm:p-5 ${canChoosePassed ? 'ring-2 ring-amber-400/60' : ''}`}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -447,6 +512,14 @@ export default function GamePage() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {!isExplainer && phase === 'TURN_ACTIVE' && (
+              <div className="glass rounded-[2rem] p-5 text-center">
+                <div className="text-3xl">🔒</div>
+                <div className="mt-2 font-black">Картите са скрити</div>
+                <p className="mt-1 text-sm font-semibold text-slate-500">Текущите думи и пасуваните карти се виждат само от обяснителя на играещия отбор.</p>
               </div>
             )}
 
