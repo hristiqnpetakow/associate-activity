@@ -28,8 +28,8 @@ The application supports **Bulgarian and English**, with a language switcher ava
 - Passed cards can be revisited at any time
 - Guessing a passed card restores one available pass slot
 - When all three pass slots are occupied, the main deck is locked until a passed card is guessed
-- Manual host-controlled transition to the next team after time expires
-- Manual host-controlled transition to the next round
+- Manual start transition to the next team: the next team sees a START button on its screen after the previous turn expires
+- Manual start transition to the next round: the team scheduled to start the round sees a START button
 - Remaining-time bonus for the same team on its first turn of the next round
 - Server-timestamp-based countdown logic
 - Pause/resume controlled by the host
@@ -231,6 +231,12 @@ The host can start only when the teams are valid and balanced.
 
 ## Round and turn rules
 
+### Turn transitions
+
+When a 60-second turn ends, the game pauses on a turn-ended screen. The next team becomes the active pending team, and a **START** button appears for members of that team. The previous team and the host cannot start that next turn.
+
+When a round ends, the next-round screen remains paused. The team scheduled to start the next round (the bonus-time team when a bonus exists, otherwise the first team in the fixed team order) sees the **START ROUND** button. The round does not start automatically.
+
 Each turn starts with **3 available pass slots**.
 
 A normal pass:
@@ -283,7 +289,7 @@ The bonus:
 
 During an active turn, the current word and passed words are visible only to the **explainer** of the playing team.
 
-Other members of the playing team and all other teams see a hidden-card state instead.
+Other members of the playing team and all other teams see a hidden-card state instead. They can still see the pass counters (free pass slots and the number of currently passed cards) so everyone can follow the turn without seeing any card text.
 
 This is currently enforced in the client UI. For a high-security public deployment, sensitive game actions should be moved to server-side RPC/Edge Functions so that secret card data is never sent to unauthorized clients.
 

@@ -74,6 +74,9 @@ export default function GamePage() {
 
   const state = game?.state as GameState | undefined;
   const team = state?.teams.find((t) => t.id === state.teamOrder[state.currentTeamIndex]) ?? null;
+  const nextTeam = state && state.teamOrder.length > 0
+    ? state.teams.find((item) => item.id === state.teamOrder[(state.currentTeamIndex + 1) % state.teamOrder.length])
+    : null;
   const currentRole = team ? roleForTeam(team, team.turnNumber) : null;
   const isExplainer = Boolean(currentRole?.explainerId && players.find((p) => p.id === currentRole.explainerId)?.user_id === userId);
   const meName = players.find((p) => p.user_id === userId)?.name ?? '';
@@ -92,11 +95,12 @@ export default function GamePage() {
   }, [state?.endAt, state?.gameStatus, state?.pausedRemainingMs, phase]);
 
   useEffect(() => {
-    if (state?.gameStatus === 'PLAYING' && phase === 'TURN_ACTIVE' && seconds === 0 && state.endAt && !busy) {
+    const expired = Boolean(state?.endAt && Date.now() >= new Date(state.endAt).getTime());
+    if (state?.gameStatus === 'PLAYING' && phase === 'TURN_ACTIVE' && expired && !busy && isExplainer) {
       void markTurnEnded();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seconds, phase]);
+  }, [seconds, phase, state?.endAt, isExplainer]);
 
   function beep() {
     if (!state?.soundOn) return;
@@ -121,16 +125,22 @@ export default function GamePage() {
   }
 
   async function markTurnEnded() {
-    if (!state || !game || state.gameStatus !== 'PLAYING' || phase !== 'TURN_ACTIVE' || busy) return;
+    if (!state || !game || state.gameStatus !== 'PLAYING' || phase !== 'TURN_ACTIVE' || busy || !team) return;
     setBusy(true);
     beep();
     try {
+      const nextIndex = state.teamOrder.length > 0
+        ? (state.currentTeamIndex + 1) % state.teamOrder.length
+        : state.currentTeamIndex;
+      const nextTeamId = state.teamOrder[nextIndex];
+      const nextTeam = state.teams.find((item) => item.id === nextTeamId);
       await persist({
         ...state,
+        currentTeamIndex: nextIndex,
         phase: 'TURN_ENDED',
         endAt: null,
         pausedRemainingMs: null,
-        lastEvent: `⏰ Времето на ${team?.name ?? 'отбора'} изтече.`,
+        lastEvent: `⏰ Времето на ${team.name} изтече. Следва ${nextTeam?.name ?? 'следващият отбор'}.`,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('turnEnded', { team: team?.name ?? t('player') }));
@@ -139,14 +149,14 @@ export default function GamePage() {
     }
   }
 
-  async function goToNextTeam() {
-    if (!state || !game || !team || phase !== 'TURN_ENDED' || room?.host_user_id !== userId || busy) return;
+  async function startNextTeamTurn() {
+    if (!state || !game || !team || phase !== 'TURN_ENDED' || busy) return;
+    const canStart = team.playerIds.some((playerId) => players.find((player) => player.id === playerId)?.user_id === userId);
+    if (!canStart) return;
     setBusy(true);
     setError('');
     try {
-      const nextIndex = (state.currentTeamIndex + 1) % state.teamOrder.length;
-      const nextState: GameState = { ...state, currentTeamIndex: nextIndex };
-      await persist(beginNextTurn(nextState, state.bonusTimeSeconds));
+      await persist(beginNextTurn(state, 0));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('nextTeamFailed'));
     } finally {
@@ -154,8 +164,12 @@ export default function GamePage() {
     }
   }
 
-  async function goToNextRound() {
-    if (!state || !game || phase !== 'ROUND_ENDED' || state.round >= 3 || room?.host_user_id !== userId || busy) return;
+  async function startNextRound() {
+    if (!state || !game || phase !== 'ROUND_ENDED' || state.round >= 3 || busy) return;
+    const starterId = state.bonusTeamId ?? state.teamOrder[0];
+    const starter = state.teams.find((item) => item.id === starterId);
+    const canStart = Boolean(starter?.playerIds.some((playerId) => players.find((player) => player.id === playerId)?.user_id === userId));
+    if (!canStart) return;
     setBusy(true);
     setError('');
     try {
@@ -362,7 +376,7 @@ export default function GamePage() {
 
   const mePlayer = players.find((p) => p.user_id === userId);
   const isCurrentTeam = Boolean(mePlayer && team.playerIds.includes(mePlayer.id));
-  const showSecretWords = Boolean(isExplainer);
+  const showSecretWords = Boolean(isExplainer && phase === 'TURN_ACTIVE');
   const timerDanger = seconds <= 10 && phase === 'TURN_ACTIVE';
   const ranking = [...state.teams].sort((a, b) => b.score - a.score);
   const explainer = players.find((p) => p.id === currentRole?.explainerId);
@@ -370,7 +384,9 @@ export default function GamePage() {
   const passedWords = state.passedDeck;
   const canChoosePassed = isExplainer && phase === 'TURN_ACTIVE';
   const canDrawNewFromPassed = isExplainer && phase === 'TURN_ACTIVE' && state.currentCardSource === 'passed' && state.passesRemaining > 0 && state.deck.length > 0;
-  const nextTeam = state.teams.find((t) => t.id === state.teamOrder[(state.currentTeamIndex + 1) % state.teamOrder.length]);
+  const roundStarterTeamId = state.bonusTeamId ?? state.teamOrder[0];
+  const roundStarterTeam = state.teams.find((item) => item.id === roundStarterTeamId);
+  const isCurrentTeamMember = Boolean(mePlayer && team.playerIds.includes(mePlayer.id));
 
   return (
     <AppShell>
@@ -393,9 +409,10 @@ export default function GamePage() {
           </div>
         </div>
 
-        <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <div className="mb-5 grid gap-3 grid-cols-2 sm:grid-cols-4">
           <div className="game-stat"><Timer size={17} /><span>{t('time')}</span><strong className={timerDanger ? 'text-rose-500' : ''}>{formatTime(seconds)}</strong></div>
           <div className="game-stat"><Flame size={17} /><span>{t('freePasses')}</span><strong>{state.passesRemaining}/3</strong></div>
+          <div className="game-stat"><RotateCcw size={17} /><span>{t('usedPasses')}</span><strong>{state.passedDeck.length}/3</strong></div>
           <div className="game-stat"><Trophy size={17} /><span>{t('yourScore')}</span><strong>{team.score}</strong></div>
         </div>
 
@@ -422,7 +439,8 @@ export default function GamePage() {
                       <div className="text-center">
                         <div className="text-5xl">⏰</div>
                         <div className="mt-3 text-3xl font-black text-slate-950">{t('timeUp')}</div>
-                        <div className="mt-1 font-bold text-slate-500">{t('waitHostNextTeam')}</div>
+                        <div className="mt-2 text-lg font-black text-indigo-700">{team.name}</div>
+                        <div className="mt-1 font-bold text-slate-500">{t('yourTurnStart')}</div>
                       </div>
                     ) : phase === 'ROUND_ENDED' ? (
                       <div className="text-center">
@@ -467,8 +485,8 @@ export default function GamePage() {
               {phase === 'TURN_ENDED' && (
                 <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-white"><div className="font-black text-lg">{t('next')} {nextTeam?.name ?? '—'}</div><div className="text-sm font-semibold text-white/70">{t('nextTurnStartsAfterButton')}</div></div>
-                    <button onClick={goToNextTeam} disabled={room.host_user_id !== userId || busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><ChevronRight size={18}/>{room.host_user_id === userId ? t('nextTeam') : t('hostChooses')}</button>
+                    <div className="text-white"><div className="font-black text-lg">{t('yourTeam')} {team.name}</div><div className="text-sm font-semibold text-white/70">{isCurrentTeamMember ? t('startYourTurnHint') : t('waitingNextTeamStart', { team: team.name })}</div></div>
+                    <button onClick={startNextTeamTurn} disabled={!isCurrentTeamMember || busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{isCurrentTeamMember ? t('startTurn') : t('waiting')}</button>
                   </div>
                 </div>
               )}
@@ -476,8 +494,8 @@ export default function GamePage() {
               {phase === 'ROUND_ENDED' && (
                 <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-white"><div className="font-black text-lg">{t('nextRound')} {Math.min(3, state.round + 1)}</div><div className="text-sm font-semibold text-white/70">{state.bonusTimeSeconds > 0 ? `${team.name} ${language === 'en' ? `gets ${state.bonusTimeSeconds}s of bonus time for the first turn only.` : `получава ${state.bonusTimeSeconds} сек. бонус само за първия си ход.`}` : t('everyTurn60')}</div></div>
-                    <button onClick={goToNextRound} disabled={room.host_user_id !== userId || busy || state.round >= 3} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{room.host_user_id === userId ? t('nextRound') : t('hostChooses')}</button>
+                    <div className="text-white"><div className="font-black text-lg">{t('nextRound')} {Math.min(3, state.round + 1)}</div><div className="text-sm font-semibold text-white/70">{state.bonusTimeSeconds > 0 ? `${roundStarterTeam?.name ?? team.name} ${language === 'en' ? `gets ${state.bonusTimeSeconds}s of bonus time for the first turn only.` : `получава ${state.bonusTimeSeconds} сек. бонус само за първия си ход.`}` : t('everyTurn60')}</div></div>
+                    <button onClick={startNextRound} disabled={!roundStarterTeam?.playerIds.includes(mePlayer?.id ?? '') || busy || state.round >= 3} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{roundStarterTeam?.playerIds.includes(mePlayer?.id ?? '') ? t('startRound') : t('waiting')}</button>
                   </div>
                 </div>
               )}
