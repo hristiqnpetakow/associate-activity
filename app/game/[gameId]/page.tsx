@@ -179,7 +179,7 @@ export default function GamePage() {
         passedDeck: picked.passedDeck,
         currentCard: picked.card,
         currentCardSource: picked.source,
-        lastEvent: `${team.name} позна! +1` ,
+        lastEvent: `${team.name} позна! +1`,
       };
 
       if (!picked.card) {
@@ -222,7 +222,16 @@ export default function GamePage() {
   }
 
   async function pass() {
-    if (!state || !game || !team || !state.currentCard || busy || !isExplainer || state.passesRemaining <= 0) return;
+    if (
+      !state ||
+      !game ||
+      !team ||
+      !state.currentCard ||
+      busy ||
+      !isExplainer ||
+      state.passesRemaining <= 0 ||
+      state.currentCardSource === 'passed'
+    ) return;
     setBusy(true);
     setError('');
     try {
@@ -263,7 +272,7 @@ export default function GamePage() {
   }
 
   async function pickPassedCard(cardId: string) {
-    if (!state || !game || busy || !isExplainer || state.passesRemaining > 0) return;
+    if (!state || !game || busy || !isExplainer) return;
     const card = state.passedDeck.find((item) => item.id === cardId);
     if (!card) return;
     setBusy(true);
@@ -304,7 +313,7 @@ export default function GamePage() {
   const explainer = players.find((p) => p.id === currentRole?.explainerId);
   const guesser = players.find((p) => p.id === currentRole?.guesserId);
   const passedWords = state.passedDeck;
-  const canChoosePassed = state.passesRemaining === 0;
+  const canChoosePassed = true;
   const nextTeam = state.teams.find((t) => t.id === state.teamOrder[(state.currentTeamIndex + 1) % state.teamOrder.length]);
 
   return (
@@ -363,7 +372,13 @@ export default function GamePage() {
               </div>
 
               <div className="relative z-10 mt-5 grid grid-cols-2 gap-3">
-                <button onClick={pass} disabled={!isExplainer || busy || state.passesRemaining <= 0 || state.gameStatus !== 'PLAYING'} className="game-action secondary disabled:opacity-35">
+                <button onClick={pass} disabled={
+                  !isExplainer ||
+                  busy ||
+                  state.passesRemaining <= 0 ||
+                  state.currentCardSource === 'passed' ||
+                  state.gameStatus !== 'PLAYING'
+                } className="game-action secondary disabled:opacity-35">
                   <span className="text-2xl">⏭️</span><span>ПАС</span><small>{state.passesRemaining} оставащи</small>
                 </button>
                 <button onClick={correct} disabled={!isExplainer || busy || state.gameStatus !== 'PLAYING'} className="game-action primary disabled:opacity-35">
