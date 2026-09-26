@@ -136,6 +136,7 @@ Run them in this order:
 supabase/migrations/001_initial.sql
 supabase/migrations/002_team_assignment.sql
 supabase/migrations/003_manual_room_teams.sql
+4. `004_allow_all_players_to_manage_manual_teams.sql`
 ```
 
 Important: paste the **SQL content inside each file**, not the filename itself.
@@ -367,3 +368,8 @@ The project uses Supabase RLS and explicit `authenticated` grants.
 The publishable Supabase key is safe to use in the browser when RLS is configured correctly. Never expose a Supabase service-role or secret key through a `NEXT_PUBLIC_*` variable.
 
 The current game implementation stores the synchronized game state as a JSON snapshot in the `games.state` column. This keeps realtime synchronization simple for a small private party game. A larger public deployment should use server-authoritative actions, concurrency/version checks, and server-side validation for scoring and card visibility.
+
+
+### Manual team formation
+
+In Manual/Free Formation mode, **every joined player** can create a team, not only the host or the first player. The player who creates a team is automatically added to it. Every other joined player can join any available team or create a new team themselves. The UI does not cap the number of teams during the lobby; the host can start only when the final team distribution is balanced according to the selected team size.

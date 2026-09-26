@@ -47,7 +47,7 @@ using (
   ))
   and not exists (
     select 1 from public.players p
-    where p.team_choice = id
+    where p.team_choice = id::text
   )
 );
 

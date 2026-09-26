@@ -106,7 +106,7 @@ export default function RoomPage() {
   }
 
   async function chooseTeam(teamId: string) {
-    if (!room || !me || me.ready) return;
+    if (!room || !me) return;
     const count = teamCounts.get(teamId) ?? 0;
     const selected = me.team_choice === teamId;
     const maxTeamSize = room.team_size + 1;
@@ -126,11 +126,7 @@ export default function RoomPage() {
   }
 
   async function createTeam() {
-    if (!room || !me || me.ready || !manualMode) return;
-    if (roomTeams.length >= neededTeamCount) {
-      setError(t('teamsNeeded', { players: players.length, count: neededTeamCount }));
-      return;
-    }
+    if (!room || !me || !manualMode) return;
     if (teamName.trim().length < 2) {
       setError(t('writeTeamName'));
       return;
@@ -184,7 +180,6 @@ export default function RoomPage() {
   if (!room || !me) return null;
 
   const readyCount = players.filter((p) => p.ready).length;
-  const teamLimitReached = roomTeams.length >= neededTeamCount;
 
   return <AppShell><section className="mx-auto max-w-6xl px-4 pb-16 pt-4 sm:px-6">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -227,7 +222,7 @@ export default function RoomPage() {
               <div className="flex items-center gap-2 font-black"><Users size={19}/> {t('createTeams')}</div>
               <p className="mt-1 text-sm font-semibold text-gray-500">{t('createTeamsDesc')}</p>
             </div>
-            <div className="shrink-0 rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-700">{roomTeams.length}/{neededTeamCount} {t('teams')}</div>
+            <div className="shrink-0 rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-700">{roomTeams.length} {t('teams')}</div>
           </div>
 
           <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -236,11 +231,11 @@ export default function RoomPage() {
               onChange={(event) => setTeamName(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void createTeam(); } }}
               maxLength={20}
-              disabled={teamLimitReached || me.ready || creatingTeam}
+              disabled={creatingTeam}
               placeholder={t('teamNamePlaceholder')}
               className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-white/80 px-4 py-3.5 font-semibold outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-50"
             />
-            <button onClick={() => void createTeam()} disabled={teamLimitReached || me.ready || creatingTeam} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3.5 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <button onClick={() => void createTeam()} disabled={creatingTeam} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3.5 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
               <Plus size={18}/>{creatingTeam ? t('creatingTeam') : t('createTeam')}
             </button>
           </div>
@@ -252,7 +247,7 @@ export default function RoomPage() {
               const maxLobbySize = room.team_size + 1;
               const creator = players.find((player) => player.user_id === team.created_by);
               return <div key={team.id} className={`rounded-2xl border p-4 transition ${selected ? 'border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10' : 'border-black/10 bg-white/60'}`}>
-                <button type="button" onClick={() => void chooseTeam(team.id)} disabled={me.ready || (!selected && members.length >= maxLobbySize)} className="w-full text-left disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" onClick={() => void chooseTeam(team.id)} disabled={!selected && members.length >= maxLobbySize} className="w-full text-left disabled:cursor-not-allowed disabled:opacity-50">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-lg font-black">{team.name}</div>
