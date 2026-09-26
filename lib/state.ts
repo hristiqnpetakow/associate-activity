@@ -1,6 +1,6 @@
 import { shuffle } from './utils';
 import { roleForTeam } from './game';
-import type { Card, GameState, Player, Room, Team } from './types';
+import type { Card, GameState, Player, Room, RoomTeam, Team } from './types';
 
 const TEAM_PALETTE = [
   'from-sky-500 to-indigo-600',
@@ -14,21 +14,40 @@ const TEAM_PALETTE = [
 const TEAM_LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З'];
 
 export function requiredTeamCount(total: number, maxSize: 2 | 3) {
-  return Math.max(1, Math.ceil(total / maxSize));
-}
+  if (total <= 0) return 1;
 
-export function teamKeys(total: number, maxSize: 2 | 3) {
-  return Array.from({ length: requiredTeamCount(total, maxSize) }, (_, index) => `team-${index + 1}`);
+  let bestCount = 1;
+  let bestCost = Number.POSITIVE_INFINITY;
+
+  for (let count = 1; count <= total; count += 1) {
+    const base = Math.floor(total / count);
+    const extra = total % count;
+    const cost = (count - extra) * Math.abs(base - maxSize) + extra * Math.abs(base + 1 - maxSize);
+
+    if (cost < bestCost || (cost === bestCost && count < bestCount)) {
+      bestCost = cost;
+      bestCount = count;
+    }
+  }
+
+  return bestCount;
 }
 
 export function teamLabel(index: number) {
   return `Отбор ${TEAM_LETTERS[index] ?? index + 1}`;
 }
 
-export function areManualTeamsBalanced(players: Player[], room: Room) {
-  const keys = teamKeys(players.length, room.team_size);
-  const counts = keys.map((key) => players.filter((player) => player.team_choice === key).length);
+export function areManualTeamsBalanced(players: Player[], room: Room, roomTeams: RoomTeam[]) {
+  const expectedCount = requiredTeamCount(players.length, room.team_size);
+  if (roomTeams.length !== expectedCount) return false;
+  if (!players.length || players.some((player) => !player.team_choice)) return false;
+
+  const teamIds = new Set(roomTeams.map((team) => team.id));
+  if (players.some((player) => !player.team_choice || !teamIds.has(player.team_choice))) return false;
+
+  const counts = roomTeams.map((team) => players.filter((player) => player.team_choice === team.id).length);
   if (counts.some((count) => count === 0)) return false;
+
   return Math.max(...counts) - Math.min(...counts) <= 1;
 }
 
@@ -39,20 +58,19 @@ function balancedSizes(total: number, maxSize: 2 | 3) {
   return Array.from({ length: teamCount }, (_, index) => base + (index < extra ? 1 : 0));
 }
 
-function buildTeams(room: Room, players: Player[]) {
+function buildTeams(room: Room, players: Player[], roomTeams: RoomTeam[] = []) {
   const teams: Team[] = [];
 
   if ((room.team_assignment_mode ?? 'RANDOM') === 'MANUAL') {
-    const keys = teamKeys(players.length, room.team_size);
-    if (!areManualTeamsBalanced(players, room)) {
-      throw new Error('Разпредели всички играчи равномерно по отборите преди да започнете.');
+    if (!areManualTeamsBalanced(players, room, roomTeams)) {
+      throw new Error('Създайте нужния брой отбори и разпределете всички играчи възможно най-равномерно.');
     }
 
-    keys.forEach((key, index) => {
-      const teamPlayers = players.filter((player) => player.team_choice === key);
+    roomTeams.forEach((roomTeam, index) => {
+      const teamPlayers = players.filter((player) => player.team_choice === roomTeam.id);
       teams.push({
-        id: crypto.randomUUID(),
-        name: teamLabel(index),
+        id: roomTeam.id,
+        name: roomTeam.name,
         color: TEAM_PALETTE[index % TEAM_PALETTE.length],
         playerIds: teamPlayers.map((player) => player.id),
         score: 0,
@@ -82,8 +100,8 @@ function buildTeams(room: Room, players: Player[]) {
   return teams;
 }
 
-export function buildGameState(room: Room, players: Player[]): GameState {
-  const teams = buildTeams(room, players);
+export function buildGameState(room: Room, players: Player[], roomTeams: RoomTeam[] = []): GameState {
+  const teams = buildTeams(room, players, roomTeams);
 
   const categoryMap: [keyof NonNullable<Player['words']>, string][] = [
     ['предмети', 'Предмет'],

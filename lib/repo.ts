@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { ensureAnonymousSession } from './auth';
-import type { GameRow, GameState, Player, Room, TeamAssignmentMode, WordInput } from './types';
+import type { GameRow, GameState, Player, Room, RoomTeam, TeamAssignmentMode, WordInput } from './types';
 
 export async function getSessionUserId() {
   const session = await ensureAnonymousSession();
@@ -74,6 +74,48 @@ export async function submitWords(roomId: string, words: WordInput) {
   if (error) throw new Error(error.message);
 }
 
+
+
+export async function loadRoomTeams(roomId: string) {
+  const { data, error } = await supabase
+    .from('room_teams')
+    .select('*')
+    .eq('room_id', roomId)
+    .order('created_at');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as RoomTeam[];
+}
+
+export async function createRoomTeam(roomId: string, name: string) {
+  const userId = await getSessionUserId();
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 20) {
+    throw new Error('Името на отбора трябва да е между 2 и 20 символа.');
+  }
+  const { data, error } = await supabase
+    .from('room_teams')
+    .insert({ room_id: roomId, name: trimmed, created_by: userId })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message.includes('duplicate key') ? 'Вече има отбор с това име.' : error.message);
+
+  const { error: playerError } = await supabase
+    .from('players')
+    .update({ team_choice: data.id, last_seen_at: new Date().toISOString() })
+    .eq('room_id', roomId)
+    .eq('user_id', userId);
+  if (playerError) {
+    await supabase.from('room_teams').delete().eq('id', data.id);
+    throw new Error(playerError.message);
+  }
+
+  return data as RoomTeam;
+}
+
+export async function deleteRoomTeam(teamId: string) {
+  const { error } = await supabase.from('room_teams').delete().eq('id', teamId);
+  if (error) throw new Error(error.message);
+}
 
 export async function setTeamChoice(roomId: string, teamChoice: string | null) {
   const userId = await getSessionUserId();

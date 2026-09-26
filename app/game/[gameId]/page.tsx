@@ -4,6 +4,7 @@ import { Check, ChevronRight, Crown, Flame, Pause, Play, RotateCcw, Sparkles, Ti
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
+import { useLanguage } from '@/lib/i18n';
 import { ensureAnonymousSession } from '@/lib/auth';
 import { roleForTeam } from '@/lib/game';
 import { loadGame, loadPlayers, loadRoom, saveGameState } from '@/lib/repo';
@@ -16,12 +17,6 @@ function names(players: Player[], ids: string[]) {
   return ids.map((id) => players.find((p) => p.id === id)?.name).filter(Boolean).join(' • ');
 }
 
-function roundTitle(round: 1 | 2 | 3) {
-  if (round === 1) return 'ОБЯСНЕНИЕ';
-  if (round === 2) return 'ЕДНА ДУМА';
-  return 'ПАНТОМИМА';
-}
-
 function roundEmoji(round: 1 | 2 | 3) {
   if (round === 1) return '🗣️';
   if (round === 2) return '💡';
@@ -29,6 +24,7 @@ function roundEmoji(round: 1 | 2 | 3) {
 }
 
 export default function GamePage() {
+  const { t, language } = useLanguage();
   const params = useParams<{ gameId: string }>();
   const gameId = String(params.gameId);
   const router = useRouter();
@@ -46,7 +42,7 @@ export default function GamePage() {
     async function init() {
       try {
         const session = await ensureAnonymousSession();
-        if (!session?.user?.id) throw new Error('Няма активна сесия.');
+        if (!session?.user?.id) throw new Error(t('invalidGameSession'));
         const g = await loadGame(gameId);
         const [r, p] = await Promise.all([loadRoom(g.room_id), loadPlayers(g.room_id)]);
         if (!active) return;
@@ -56,7 +52,7 @@ export default function GamePage() {
         setPlayers(p);
         if (g.state.gameStatus === 'FINISHED') router.replace(`/results/${g.id}`);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : 'Не успяхме да заредим играта.');
+        if (active) setError(err instanceof Error ? err.message : t('loadGameFailed'));
       }
     }
     init();
@@ -137,7 +133,7 @@ export default function GamePage() {
         lastEvent: `⏰ Времето на ${team?.name ?? 'отбора'} изтече.`,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Неуспешно приключване на хода.');
+      setError(err instanceof Error ? err.message : t('turnEnded', { team: team?.name ?? t('player') }));
     } finally {
       setBusy(false);
     }
@@ -152,7 +148,7 @@ export default function GamePage() {
       const nextState: GameState = { ...state, currentTeamIndex: nextIndex };
       await persist(beginNextTurn(nextState, state.bonusTimeSeconds));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Неуспешно преминаване към следващия отбор.');
+      setError(err instanceof Error ? err.message : t('nextTeamFailed'));
     } finally {
       setBusy(false);
     }
@@ -165,7 +161,7 @@ export default function GamePage() {
     try {
       await persist(beginNextRound(state));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Неуспешно преминаване към следващия рунд.');
+      setError(err instanceof Error ? err.message : t('nextRoundFailed'));
     } finally {
       setBusy(false);
     }
@@ -253,7 +249,7 @@ export default function GamePage() {
         await persist(nextBase);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Неуспешно отбелязване.');
+      setError(err instanceof Error ? err.message : t('markKnownFailed'));
     } finally {
       setBusy(false);
     }
@@ -286,7 +282,7 @@ export default function GamePage() {
           lastEvent: `${team.name} остави пасуваната дума и изтегли нова`,
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Неуспешно теглене на нова дума.');
+        setError(err instanceof Error ? err.message : t('nextWordFailed'));
       } finally {
         setBusy(false);
       }
@@ -316,7 +312,7 @@ export default function GamePage() {
           : `${team.name} пасува`,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Неуспешен пас.');
+      setError(err instanceof Error ? err.message : t('passFailed'));
     } finally {
       setBusy(false);
     }
@@ -335,7 +331,7 @@ export default function GamePage() {
         lastEvent: `Върната е пасувана дума: ${card.text}`,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не успяхме да изберем пасуваната дума.');
+      setError(err instanceof Error ? err.message : t('selectPassedFailed'));
     } finally {
       setBusy(false);
     }
@@ -354,14 +350,14 @@ export default function GamePage() {
         await persist({ ...state, gameStatus: 'PAUSED', pausedRemainingMs: remaining, endAt: null, lastEvent: 'Играта е на пауза' });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Неуспешна пауза.');
+      setError(err instanceof Error ? err.message : t('pauseFailed'));
     } finally {
       setBusy(false);
     }
   }
 
   if (!game || !state || !team || !room) {
-    return <AppShell><div className="mx-auto max-w-xl px-4 py-20 text-center"><div className="glass rounded-[2rem] p-7">{error ? <div className="font-bold text-rose-600">{error}</div> : <div className="font-bold">Зареждаме играта…</div>}</div></div></AppShell>;
+    return <AppShell><div className="mx-auto max-w-xl px-4 py-20 text-center"><div className="glass rounded-[2rem] p-7">{error ? <div className="font-bold text-rose-600">{error}</div> : <div className="font-bold">{t('loadingGame')}</div>}</div></div></AppShell>;
   }
 
   const mePlayer = players.find((p) => p.user_id === userId);
@@ -382,25 +378,25 @@ export default function GamePage() {
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2 text-sm font-black uppercase tracking-[.12em] text-slate-500">
-              <span className="game-chip">{roundEmoji(state.round)} Рунд {state.round}</span>
+              <span className="game-chip">{roundEmoji(state.round)} {t('round')} {state.round}</span>
               <span className={`game-chip bg-gradient-to-r ${team.color} text-white border-0`}>{team.name}</span>
             </div>
-            <h1 className="game-title text-4xl font-black tracking-tight sm:text-6xl">{roundTitle(state.round)}</h1>
+            <h1 className="game-title text-4xl font-black tracking-tight sm:text-6xl">{state.round === 1 ? t('roundExplanation') : state.round === 2 ? t('roundOneWord') : t('roundMime')}</h1>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button onClick={() => persist({ ...state, soundOn: !state.soundOn })} className="icon-button" aria-label="Звук">
+            <button onClick={() => persist({ ...state, soundOn: !state.soundOn })} className="icon-button" aria-label={t('sound')}>
               {state.soundOn ? <Volume2 size={19} /> : <VolumeX size={19} />}
             </button>
-            {room.host_user_id === userId && <button onClick={togglePause} className="icon-button" aria-label="Пауза">
+            {room.host_user_id === userId && <button onClick={togglePause} className="icon-button" aria-label={t('pause')}>
               {state.gameStatus === 'PAUSED' ? <Play size={19} /> : <Pause size={19} />}
             </button>}
           </div>
         </div>
 
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
-          <div className="game-stat"><Timer size={17} /><span>Време</span><strong className={timerDanger ? 'text-rose-500' : ''}>{formatTime(seconds)}</strong></div>
-          <div className="game-stat"><Flame size={17} /><span>Свободни пасове</span><strong>{state.passesRemaining}/3</strong></div>
-          <div className="game-stat"><Trophy size={17} /><span>Ваш резултат</span><strong>{team.score}</strong></div>
+          <div className="game-stat"><Timer size={17} /><span>{t('time')}</span><strong className={timerDanger ? 'text-rose-500' : ''}>{formatTime(seconds)}</strong></div>
+          <div className="game-stat"><Flame size={17} /><span>{t('freePasses')}</span><strong>{state.passesRemaining}/3</strong></div>
+          <div className="game-stat"><Trophy size={17} /><span>{t('yourScore')}</span><strong>{team.score}</strong></div>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -410,7 +406,7 @@ export default function GamePage() {
               <div className="pointer-events-none absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-fuchsia-400/30 blur-3xl" />
               <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="showcase-kicker">СЕГА ИГРАЕ</div>
+                  <div className="showcase-kicker">{t('nowPlaying')}</div>
                   <div className="mt-1 flex items-center gap-2 text-lg font-black">{team.name} <ChevronRight size={18} className="opacity-60" /> {nextTeam?.name ?? '—'}</div>
                 </div>
                 <div className={`timer-orb ${timerDanger ? 'danger' : ''}`}><span>{formatTime(seconds)}</span></div>
@@ -419,35 +415,35 @@ export default function GamePage() {
               <div className="relative z-10 mt-6 rounded-[2rem] bg-white/10 p-2 ring-1 ring-white/15 backdrop-blur-sm sm:p-3">
                 <div className="rounded-[1.6rem] bg-white px-5 py-8 text-center text-slate-950 shadow-[0_30px_80px_rgba(11,8,40,.28)] sm:px-10 sm:py-12">
                   <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1.5 text-xs font-black uppercase tracking-[.2em] text-violet-700">
-                    <WandSparkles size={14} /> {state.currentCardSource === 'passed' ? 'ПАСУВАНА ДУМА' : state.round === 3 ? 'ПОКАЖИ С ЯЗИКА НА ТЯЛОТО' : 'ПОЗНАЙ ДУМАТА'}
+                    <WandSparkles size={14} /> {state.currentCardSource === 'passed' ? t('passedWord') : state.round === 3 ? t('showWithBody') : t('guessWord')}
                   </div>
                   <div className="mt-7 min-h-28 grid place-items-center sm:min-h-36">
                     {phase === 'TURN_ENDED' ? (
                       <div className="text-center">
                         <div className="text-5xl">⏰</div>
-                        <div className="mt-3 text-3xl font-black text-slate-950">Времето изтече!</div>
-                        <div className="mt-1 font-bold text-slate-500">Изчакайте домакина да пусне следващия отбор.</div>
+                        <div className="mt-3 text-3xl font-black text-slate-950">{t('timeUp')}</div>
+                        <div className="mt-1 font-bold text-slate-500">{t('waitHostNextTeam')}</div>
                       </div>
                     ) : phase === 'ROUND_ENDED' ? (
                       <div className="text-center">
                         <div className="text-5xl">🎉</div>
-                        <div className="mt-3 text-3xl font-black text-slate-950">Рунд {state.round} приключи!</div>
-                        <div className="mt-1 font-bold text-slate-500">Бонус време: {state.bonusTimeSeconds} сек. само за първия ход</div>
+                        <div className="mt-3 text-3xl font-black text-slate-950">{t('roundFinished', { round: state.round })}</div>
+                        <div className="mt-1 font-bold text-slate-500">{t('bonusTime', { seconds: state.bonusTimeSeconds })}</div>
                       </div>
                     ) : showSecretWords ? (
-                      <div className="word-display break-words">{state.currentCard?.text ?? 'Няма карта'}</div>
+                      <div className="word-display break-words">{state.currentCard?.text ?? t('noCard')}</div>
                     ) : (
                       <div className="max-w-xl text-center">
                         <div className="text-5xl">🙈</div>
-                        <div className="mt-4 text-2xl font-black text-slate-950">Думата е скрита</div>
-                        <div className="mt-2 font-bold text-slate-500">{isCurrentTeam ? 'Ти си в играещия отбор, но си познаващият. Обяснителят вижда думата.' : 'Друг отбор играе — думите и пасовете са скрити.'}</div>
+                        <div className="mt-4 text-2xl font-black text-slate-950">{t('wordHidden')}</div>
+                        <div className="mt-2 font-bold text-slate-500">{isCurrentTeam ? t('currentTeamGuesser') : t('otherTeamHidden')}</div>
                       </div>
                     )}
                   </div>
                   {phase === 'TURN_ACTIVE' && showSecretWords && <div className="mt-6 text-sm font-bold leading-6 text-slate-500 sm:text-base">
-                    {state.round === 1 ? 'Обяснявай свободно, но без самата дума и нейни производни.' : state.round === 2 ? 'Само една подсказваща дума. Без изречения.' : 'Без думи и звуци — само жестове, мимики и пантомима.'}
+                    {state.round === 1 ? t('roundOneRule') : state.round === 2 ? t('roundTwoRule') : t('roundThreeRule')}
                   </div>}
-                  {phase === 'TURN_ACTIVE' && showSecretWords && state.currentCardSource === 'passed' && <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-800">↩️ Върната пасувана дума</div>}
+                  {phase === 'TURN_ACTIVE' && showSecretWords && state.currentCardSource === 'passed' && <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-800">{t('returnedPassed')}</div>}
                 </div>
               </div>
 
@@ -459,11 +455,11 @@ export default function GamePage() {
                     className="game-action secondary disabled:opacity-35"
                   >
                     <span className="text-2xl">⏭️</span>
-                    <span>{state.currentCardSource === 'passed' ? 'НОВА ДУМА' : 'ПАС'}</span>
-                    <small>{state.currentCardSource === 'passed' ? (canDrawNewFromPassed ? 'не харчи пас' : 'първо познай пасувана') : `${state.passesRemaining} оставащи`}</small>
+                    <span>{state.currentCardSource === 'passed' ? t('newWordButton') : t('passButton')}</span>
+                    <small>{state.currentCardSource === 'passed' ? (canDrawNewFromPassed ? t('noPassSpent') : t('guessPassedFirst')) : `${state.passesRemaining} ${t('remaining')}`}</small>
                   </button>
                   <button onClick={correct} disabled={!isExplainer || busy || state.gameStatus !== 'PLAYING'} className="game-action primary disabled:opacity-35">
-                    <span className="text-2xl">✅</span><span>ПОЗНАТА!</span><small>{state.currentCardSource === 'passed' ? '→ +1 пас и нова' : '+1 точка'}</small>
+                    <span className="text-2xl">✅</span><span>{t('knownButton')}</span><small>{state.currentCardSource === 'passed' ? t('oneMorePassAndNew') : t('onePoint')}</small>
                   </button>
                 </div>
               )}
@@ -471,8 +467,8 @@ export default function GamePage() {
               {phase === 'TURN_ENDED' && (
                 <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-white"><div className="font-black text-lg">Следва {nextTeam?.name ?? '—'}</div><div className="text-sm font-semibold text-white/70">Следващият ход започва след натискане на бутона.</div></div>
-                    <button onClick={goToNextTeam} disabled={room.host_user_id !== userId || busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><ChevronRight size={18}/>{room.host_user_id === userId ? 'Следващ отбор' : 'Домакинът избира'}</button>
+                    <div className="text-white"><div className="font-black text-lg">{t('next')} {nextTeam?.name ?? '—'}</div><div className="text-sm font-semibold text-white/70">{t('nextTurnStartsAfterButton')}</div></div>
+                    <button onClick={goToNextTeam} disabled={room.host_user_id !== userId || busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><ChevronRight size={18}/>{room.host_user_id === userId ? t('nextTeam') : t('hostChooses')}</button>
                   </div>
                 </div>
               )}
@@ -480,24 +476,24 @@ export default function GamePage() {
               {phase === 'ROUND_ENDED' && (
                 <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-white"><div className="font-black text-lg">Следва Рунд {Math.min(3, state.round + 1)}</div><div className="text-sm font-semibold text-white/70">{state.bonusTimeSeconds > 0 ? `${team.name} получава ${state.bonusTimeSeconds} сек. бонус само за първия си ход.` : 'Всеки ход започва с 60 секунди.'}</div></div>
-                    <button onClick={goToNextRound} disabled={room.host_user_id !== userId || busy || state.round >= 3} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{room.host_user_id === userId ? 'Следващ рунд' : 'Домакинът избира'}</button>
+                    <div className="text-white"><div className="font-black text-lg">{t('nextRound')} {Math.min(3, state.round + 1)}</div><div className="text-sm font-semibold text-white/70">{state.bonusTimeSeconds > 0 ? `${team.name} ${language === 'en' ? `gets ${state.bonusTimeSeconds}s of bonus time for the first turn only.` : `получава ${state.bonusTimeSeconds} сек. бонус само за първия си ход.`}` : t('everyTurn60')}</div></div>
+                    <button onClick={goToNextRound} disabled={room.host_user_id !== userId || busy || state.round >= 3} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{room.host_user_id === userId ? t('nextRound') : t('hostChooses')}</button>
                   </div>
                 </div>
               )}
 
-              {!isExplainer && phase === 'TURN_ACTIVE' && <div className="relative z-10 mt-4 flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-center text-sm font-black text-white ring-1 ring-white/10">🎯 Думата е скрита за теб — само обяснителят я вижда.</div>}
-              {state.gameStatus === 'PAUSED' && <div className="relative z-10 mt-4 rounded-2xl bg-amber-300 px-4 py-3 text-center font-black text-amber-950">⏸ Играта е на пауза</div>}
+              {!isExplainer && phase === 'TURN_ACTIVE' && <div className="relative z-10 mt-4 flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-center text-sm font-black text-white ring-1 ring-white/10">{t('hiddenForYou')}</div>}
+              {state.gameStatus === 'PAUSED' && <div className="relative z-10 mt-4 rounded-2xl bg-amber-300 px-4 py-3 text-center font-black text-amber-950">{t('gamePaused')}</div>}
             </div>
 
             {isExplainer && passedWords.length > 0 && (
               <div className={`glass rounded-[2rem] p-4 sm:p-5 ${canChoosePassed ? 'ring-2 ring-amber-400/60' : ''}`}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="flex items-center gap-2 font-black text-lg"><RotateCcw size={18} /> Пасувани думи <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{passedWords.length}/3</span></div>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">Избери пасувана карта по всяко време. Ако имаш свободен пас-слот, можеш да я оставиш в паса и да изтеглиш нова. При 3 пасувани карти трябва да познаеш пасувана дума; тогава освобождаваш 1 слот и получаваш обратно 1 пас.</p>
+                    <div className="flex items-center gap-2 font-black text-lg"><RotateCcw size={18} /> {t('passedWords')} <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{passedWords.length}/3</span></div>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">{t('passedWordsHint')}</p>
                   </div>
-                  <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">+1 пас при позната пасувана дума</span>
+                  <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">{t('passReturned')}</span>
                 </div>
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
                   {passedWords.map((card) => (
@@ -508,7 +504,7 @@ export default function GamePage() {
                       className={`passed-card ${state.currentCard?.id === card.id ? 'active' : ''} ${canChoosePassed ? 'clickable' : ''}`}
                     >
                       <span>{card.text}</span>
-                      {state.currentCard?.id === card.id && <span className="absolute right-2 top-2 rounded-full bg-violet-600 px-2 py-1 text-[10px] font-black text-white">СЕГА</span>}
+                      {state.currentCard?.id === card.id && <span className="absolute right-2 top-2 rounded-full bg-violet-600 px-2 py-1 text-[10px] font-black text-white">{t('now')}</span>}
                     </button>
                   ))}
                 </div>
@@ -518,8 +514,8 @@ export default function GamePage() {
             {!isExplainer && phase === 'TURN_ACTIVE' && (
               <div className="glass rounded-[2rem] p-5 text-center">
                 <div className="text-3xl">🔒</div>
-                <div className="mt-2 font-black">Картите са скрити</div>
-                <p className="mt-1 text-sm font-semibold text-slate-500">Текущите думи и пасуваните карти се виждат само от обяснителя на играещия отбор.</p>
+                <div className="mt-2 font-black">{t('cardsHidden')}</div>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{t('hiddenCardsHint')}</p>
               </div>
             )}
 
@@ -527,16 +523,16 @@ export default function GamePage() {
 
             <div className="glass rounded-[2rem] p-4 sm:p-5">
               <div className="flex flex-wrap gap-2 text-sm font-bold">
-                <span className="status-pill"><Sparkles size={14} /> {state.deck.length + state.passedDeck.length + (state.currentCard ? 1 : 0)} карти в играта</span>
+                <span className="status-pill"><Sparkles size={14} /> {state.deck.length + state.passedDeck.length + (state.currentCard ? 1 : 0)} {t('cardsInGame')}</span>
                 <span className="status-pill">👤 {meName}</span>
-                <span className="status-pill">➡️ Следва {nextTeam?.name ?? '—'}</span>
+                <span className="status-pill">➡️ {t('next')} {nextTeam?.name ?? '—'}</span>
               </div>
             </div>
           </div>
 
           <aside className="space-y-4">
             <div className="glass rounded-[2rem] p-4 sm:p-5">
-              <div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2 font-black text-lg"><Crown size={18} className="text-amber-500" /> Класиране</div><div className="text-xs font-black uppercase tracking-wider text-slate-400">Общо</div></div>
+              <div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2 font-black text-lg"><Crown size={18} className="text-amber-500" /> {t('ranking')}</div><div className="text-xs font-black uppercase tracking-wider text-slate-400">{t('total')}</div></div>
               <div className="space-y-2">
                 {ranking.map((t, i) => (
                   <div key={t.id} className={`rounded-2xl border border-white/15 bg-gradient-to-r ${t.color} p-3 text-white shadow-lg ${t.id === team.id ? 'scale-[1.02] ring-2 ring-white/70' : ''}`}>
@@ -548,7 +544,7 @@ export default function GamePage() {
             </div>
 
             <div className="glass rounded-[2rem] p-5">
-              <div className="flex items-center justify-between"><div className="font-black">Рунд {state.round}</div><div className="text-xs font-black text-slate-400">ТОЧКИ</div></div>
+              <div className="flex items-center justify-between"><div className="font-black">{t('round')} {state.round}</div><div className="text-xs font-black text-slate-400">{t('roundPoints')}</div></div>
               <div className="mt-3 space-y-2">
                 {state.teams.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl bg-black/[.035] px-3 py-2.5 dark:bg-white/[.05]"><span className="font-bold">{t.name}</span><span className="font-black tabular-nums">{t.roundScores[String(state.round)] ?? 0}</span></div>)}
               </div>
@@ -556,14 +552,14 @@ export default function GamePage() {
 
             <div className="rounded-[2rem] bg-gradient-to-br from-amber-300 via-orange-300 to-pink-300 p-[1px] shadow-xl">
               <div className="rounded-[1.95rem] bg-white/80 p-5 backdrop-blur dark:bg-slate-950/70">
-                <div className="flex items-center gap-2 font-black"><Flame size={18} className="text-orange-500" /> Правило на рунда</div>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{state.round === 1 ? 'Много думи, никакъв корен.' : state.round === 2 ? 'Само една дума за подсказка.' : 'Действай — без звук.'}</p>
+                <div className="flex items-center gap-2 font-black"><Flame size={18} className="text-orange-500" /> {t('roundRule')}</div>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{state.round === 1 ? t('manyWordsNoRoot') : state.round === 2 ? t('oneHintWord') : t('actNoSound')}</p>
               </div>
             </div>
           </aside>
         </div>
 
-        <div className="mt-5 text-center text-xs font-bold text-slate-400">{explainer?.name ?? '—'} обяснява <span className="mx-1">•</span> {guesser?.name ?? '—'} познава <span className="mx-1">•</span> realtime ⚡</div>
+        <div className="mt-5 text-center text-xs font-bold text-slate-400">{explainer?.name ?? '—'} {t('explains')} <span className="mx-1">•</span> {guesser?.name ?? '—'} {t('guesses')} <span className="mx-1">•</span> {t('realtime')}</div>
       </section>
     </AppShell>
   );

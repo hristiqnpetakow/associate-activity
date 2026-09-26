@@ -75,6 +75,14 @@ export type GameRow = {
   finished_at: string | null;
 };
 
+export type RoomTeam = {
+  id: string;
+  room_id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+};
+
 export type Room = {
   id: string;
   code: string;
