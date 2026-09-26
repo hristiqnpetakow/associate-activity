@@ -167,11 +167,19 @@ export default function GamePage() {
           : t,
       );
       const cardId = state.currentCard.id;
+      const wasPassedCard = state.currentCardSource === 'passed';
       const nextDeck = state.deck.filter((c) => c.id !== cardId);
-      const nextPassed = state.currentCardSource === 'passed'
+      const nextPassed = wasPassedCard
         ? state.passedDeck.filter((c) => c.id !== cardId)
         : state.passedDeck;
       const picked = nextCardAfterCorrect(nextDeck, nextPassed);
+
+      // ПАСОВЕТЕ представляват свободните места в списъка с до 3 пасувани карти.
+      // Ако познаем пасувана дума, освобождаваме едно място и получаваме +1 пас.
+      const nextPassesRemaining = wasPassedCard
+        ? Math.min(3, state.passesRemaining + 1)
+        : state.passesRemaining;
+
       const nextBase: GameState = {
         ...state,
         teams,
@@ -179,7 +187,10 @@ export default function GamePage() {
         passedDeck: picked.passedDeck,
         currentCard: picked.card,
         currentCardSource: picked.source,
-        lastEvent: `${team.name} позна! +1` ,
+        passesRemaining: nextPassesRemaining,
+        lastEvent: wasPassedCard
+          ? `${team.name} позна пасувана дума! +1 точка • +1 пас`
+          : `${team.name} позна! +1`,
       };
 
       if (!picked.card) {
@@ -225,10 +236,9 @@ export default function GamePage() {
     if (!state || !game || !team || !state.currentCard || busy || !isExplainer) return;
 
     // Ако сме се върнали към вече пасувана дума, можем да продължим към
-    // нова дума само докато има останали неизползвани пасове. Самият пас
-    // тук НЕ харчи нов пас — той само оставя картата в passedDeck и тегли
-    // следваща карта от основното тесте. След като трите паса са изчерпани,
-    // трябва да познаем текущата пасувана дума, за да отключим нова карта.
+    // нова дума, без да харчим нов пас, но само ако имаме свободен пас-слот.
+    // При 3 активни пасувани думи основното тесте е блокирано, докато не
+    // познаем поне една от пасуваните карти.
     if (state.currentCardSource === 'passed') {
       if (state.passesRemaining <= 0 || state.deck.length === 0) return;
 
@@ -262,7 +272,7 @@ export default function GamePage() {
     setBusy(true);
     setError('');
     try {
-      const nextPassed = [state.currentCard, ...state.passedDeck];
+      const nextPassed = [state.currentCard, ...state.passedDeck].slice(0, 3);
       const remainingPasses = state.passesRemaining - 1;
       const nextDeck = [...state.deck];
       const nextCard = nextDeck.pop() ?? null;
@@ -360,7 +370,7 @@ export default function GamePage() {
 
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <div className="game-stat"><Timer size={17} /><span>Време</span><strong className={timerDanger ? 'text-rose-500' : ''}>{formatTime(seconds)}</strong></div>
-          <div className="game-stat"><Flame size={17} /><span>Точка за дума</span><strong>+1</strong></div>
+          <div className="game-stat"><Flame size={17} /><span>Свободни пасове</span><strong>{state.passesRemaining}/3</strong></div>
           <div className="game-stat"><Trophy size={17} /><span>Ваш резултат</span><strong>{team.score}</strong></div>
         </div>
 
@@ -419,10 +429,10 @@ export default function GamePage() {
               <div className={`glass rounded-[2rem] p-4 sm:p-5 ${canChoosePassed ? 'ring-2 ring-amber-400/60' : ''}`}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="flex items-center gap-2 font-black text-lg"><RotateCcw size={18} /> Пасувани думи <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{passedWords.length}</span></div>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">Избери по всяко време пасувана карта. Ако имаш оставащ пас, можеш да я оставиш в паса и да изтеглиш нова; след 3 паса трябва да познаеш пасувана карта, за да продължиш.</p>
+                    <div className="flex items-center gap-2 font-black text-lg"><RotateCcw size={18} /> Пасувани думи <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{passedWords.length}/3</span></div>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">Избери пасувана карта по всяко време. Ако имаш свободен пас-слот, можеш да я оставиш в паса и да изтеглиш нова. При 3 пасувани карти трябва да познаеш пасувана дума; тогава освобождаваш 1 слот и получаваш обратно 1 пас.</p>
                   </div>
-                  <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">Можеш да се връщаш към тях винаги</span>
+                  <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">+1 пас при позната пасувана дума</span>
                 </div>
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
                   {passedWords.map((card) => (
