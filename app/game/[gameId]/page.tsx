@@ -228,41 +228,56 @@ export default function GamePage() {
       !team ||
       !state.currentCard ||
       busy ||
-      !isExplainer ||
-      state.passesRemaining <= 0 ||
-      state.currentCardSource === 'passed'
+      !isExplainer
     ) return;
+
     setBusy(true);
     setError('');
-    try {
-      const id = state.currentCard.id;
-      const nextDeck = state.deck.filter((card) => card.id !== id);
-      const nextPassed = [state.currentCard, ...state.passedDeck];
-      const remainingPasses = state.passesRemaining - 1;
 
-      if (remainingPasses === 0) {
-        const passedCurrent = nextPassed[0] ?? null;
-        await persist({
-          ...state,
-          deck: nextDeck,
-          passedDeck: nextPassed,
-          currentCard: passedCurrent,
-          currentCardSource: passedCurrent ? 'passed' : null,
-          passesRemaining: 0,
-          lastEvent: `${team.name} използва последния пас — време е за пасуваните думи!`,
-        });
+    try {
+      const currentCard = state.currentCard;
+
+      // Ако сме върху вече пасувана дума:
+      // не харчим нов пас, а просто продължаваме към
+      // нова дума от основното тесте.
+      if (state.currentCardSource === 'passed') {
+        const nextDeck = [...state.deck];
+
+        if (nextDeck.length > 0) {
+          const nextCard = nextDeck.pop() ?? null;
+
+          await persist({
+            ...state,
+            deck: nextDeck,
+            // passedDeck НЕ се променя
+            currentCard: nextCard,
+            currentCardSource: nextCard ? 'deck' : 'passed',
+            lastEvent: `${team.name} пропусна пасувана дума и продължи напред`,
+          });
+        }
+
         return;
       }
 
-      const currentCard = nextDeck.at(-1) ?? null;
+      if (state.passesRemaining <= 0) return;
+
+      const nextDeck = state.deck.filter((card) => card.id !== currentCard.id);
+      const nextPassed = [currentCard, ...state.passedDeck];
+      const remainingPasses = state.passesRemaining - 1;
+
+      const nextCard = nextDeck.pop() ?? null;
+
       await persist({
         ...state,
-        deck: currentCard ? nextDeck.slice(0, -1) : nextDeck,
+        deck: nextDeck,
         passedDeck: nextPassed,
-        currentCard,
-        currentCardSource: currentCard ? 'deck' : (nextPassed[0] ? 'passed' : null),
+        currentCard: nextCard ?? nextPassed[0] ?? null,
+        currentCardSource: nextCard ? 'deck' : 'passed',
         passesRemaining: remainingPasses,
-        lastEvent: `${team.name} пасува`,
+        lastEvent:
+          remainingPasses > 0
+            ? `${team.name} пасува`
+            : `${team.name} използва последния пас`,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Неуспешен пас.');
@@ -273,13 +288,25 @@ export default function GamePage() {
 
   async function pickPassedCard(cardId: string) {
     if (!state || !game || busy || !isExplainer) return;
+
     const card = state.passedDeck.find((item) => item.id === cardId);
     if (!card) return;
+
     setBusy(true);
+
     try {
-      await persist({ ...state, currentCard: card, currentCardSource: 'passed', lastEvent: `Върната е пасувана дума: ${card.text}` });
+      await persist({
+        ...state,
+        currentCard: card,
+        currentCardSource: 'passed',
+        lastEvent: `Върната е пасувана дума: ${card.text}`,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не успяхме да изберем пасуваната дума.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Не успяхме да изберем пасуваната дума.'
+      );
     } finally {
       setBusy(false);
     }
@@ -375,8 +402,7 @@ export default function GamePage() {
                 <button onClick={pass} disabled={
                   !isExplainer ||
                   busy ||
-                  state.passesRemaining <= 0 ||
-                  state.currentCardSource === 'passed' ||
+                  (state.passesRemaining <= 0 && state.currentCardSource !== 'passed') ||
                   state.gameStatus !== 'PLAYING'
                 } className="game-action secondary disabled:opacity-35">
                   <span className="text-2xl">⏭️</span><span>ПАС</span><small>{state.passesRemaining} оставащи</small>
