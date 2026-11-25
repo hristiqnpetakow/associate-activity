@@ -1,7 +1,10 @@
 export type Round = 1 | 2 | 3;
 export type GameStatus = 'LOBBY' | 'WORD_INPUT' | 'PLAYING' | 'PAUSED' | 'FINISHED';
-export type GamePhase = 'TURN_ACTIVE' | 'TURN_ENDED' | 'ROUND_ENDED';
-export type TeamAssignmentMode = 'RANDOM' | 'MANUAL';
+export type GamePhase =
+  | 'GAME_READY'
+  | 'TURN_ACTIVE'
+  | 'TURN_ENDED'
+  | 'ROUND_ENDED';export type TeamAssignmentMode = 'RANDOM' | 'MANUAL';
 
 export type Player = {
   id: string;

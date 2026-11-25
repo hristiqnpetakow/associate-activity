@@ -100,7 +100,11 @@ function buildTeams(room: Room, players: Player[], roomTeams: RoomTeam[] = []) {
   return teams;
 }
 
-export function buildGameState(room: Room, players: Player[], roomTeams: RoomTeam[] = []): GameState {
+export function buildGameState(
+  room: Room,
+  players: Player[],
+  roomTeams: RoomTeam[] = [],
+): GameState {
   const teams = buildTeams(room, players, roomTeams);
 
   const categoryMap: [keyof NonNullable<Player['words']>, string][] = [
@@ -109,44 +113,92 @@ export function buildGameState(room: Room, players: Player[], roomTeams: RoomTea
     ['личности', 'Личност'],
     ['професии', 'Професия'],
   ];
+
   const allCards: Card[] = players.flatMap((player) => {
     if (!player.words) return [];
-    return categoryMap.flatMap(([key, category]) => player.words?.[key].map((text) => ({
-      id: crypto.randomUUID(),
-      text,
-      category,
-    })) ?? []);
+
+    return categoryMap.flatMap(
+      ([key, category]) =>
+        player.words?.[key].map((text) => ({
+          id: crypto.randomUUID(),
+          text,
+          category,
+        })) ?? [],
+    );
   });
+
   const deck = shuffle(allCards);
-  const currentCard = deck.pop() ?? null;
-  const now = Date.now();
-  const firstTeam = teams[0];
-  const initialSeconds = 60;
-  const firstRole = firstTeam ? roleForTeam(firstTeam, firstTeam.turnNumber) : { explainerId: '', guesserId: '' };
 
   return {
     version: 2,
     gameStatus: 'PLAYING',
-    phase: 'TURN_ACTIVE',
+    phase: 'GAME_READY',
+
     round: 1,
+
     teams,
     teamOrder: teams.map((team) => team.id),
     currentTeamIndex: 0,
-    currentCard,
-    currentCardSource: currentCard ? 'deck' : null,
+
+    currentCard: null,
+    currentCardSource: null,
+
     deck,
     passedDeck: [],
     allCards,
+
     passesRemaining: 3,
-    turnStartedAt: new Date(now).toISOString(),
-    endAt: new Date(now + initialSeconds * 1000).toISOString(),
+
+    turnStartedAt: null,
+    endAt: null,
     pausedRemainingMs: null,
+
     bonusTimeSeconds: 0,
     bonusTeamId: null,
+
     soundOn: true,
-    lastEvent: firstRole.explainerId ? `Започва ${firstTeam?.name}` : null,
-    roundStartedAt: new Date(now).toISOString(),
+    lastEvent: 'Играта е готова за старт',
+
+    roundStartedAt: null,
     winnerTeamId: null,
+  };
+}
+
+export function beginFirstTurn(state: GameState): GameState {
+  if (state.phase !== 'GAME_READY') return state;
+
+  const deck = [...state.deck];
+  const currentCard = deck.pop() ?? null;
+
+  const now = Date.now();
+
+  const firstTeam = state.teams.find(
+    (team) => team.id === state.teamOrder[0],
+  );
+
+  return {
+    ...state,
+
+    phase: 'TURN_ACTIVE',
+    gameStatus: 'PLAYING',
+
+    currentTeamIndex: 0,
+
+    currentCard,
+    currentCardSource: currentCard ? 'deck' : null,
+
+    deck,
+    passedDeck: [],
+
+    passesRemaining: 3,
+
+    turnStartedAt: new Date(now).toISOString(),
+    endAt: new Date(now + 60_000).toISOString(),
+
+    pausedRemainingMs: null,
+    roundStartedAt: new Date(now).toISOString(),
+
+    lastEvent: `${firstTeam?.name ?? 'Първият отбор'} започва Рунд 1`,
   };
 }
 

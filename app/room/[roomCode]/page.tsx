@@ -282,7 +282,7 @@ export default function RoomPage() {
           <div className="font-black">{manualMode ? t('freeTeamFormation') : t('randomTeamFormation')} · {t('teamSizeLabel')} {room.team_size}</div>
           <div className="mt-1 text-sm text-gray-500">{manualMode ? t('playersChooseTeams') : t('appRandomizes')}</div>
         </div>
-        {me.is_host ? <button onClick={startGame} disabled={!allReady||!teamsReady||starting} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-6 py-4 font-black text-white shadow-xl disabled:cursor-not-allowed disabled:opacity-40"><Play size={18}/>{starting?t('starting'):t('startGame')}</button> : <div className="inline-flex items-center gap-2 text-sm font-bold text-gray-500"><span className="h-2.5 w-2.5 rounded-full bg-amber-400 pulse-soft"/> {t('waitingHost')}</div>}
+        {me.is_host ? <button onClick={startGame} disabled={!allReady||!teamsReady||starting} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-6 py-4 font-black text-white shadow-xl disabled:cursor-not-allowed disabled:opacity-40"><Play size={18}/>{starting?t('starting'):t('openGame')}</button> : <div className="inline-flex items-center gap-2 text-sm font-bold text-gray-500"><span className="h-2.5 w-2.5 rounded-full bg-amber-400 pulse-soft"/> {t('waitingHost')}</div>}
       </div>
     </div>
 

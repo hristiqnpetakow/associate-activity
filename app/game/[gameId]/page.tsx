@@ -8,8 +8,11 @@ import { useLanguage } from '@/lib/i18n';
 import { ensureAnonymousSession } from '@/lib/auth';
 import { roleForTeam } from '@/lib/game';
 import { loadGame, loadPlayers, loadRoom, saveGameState } from '@/lib/repo';
-import { beginNextRound, beginNextTurn } from '@/lib/state';
-import { supabase } from '@/lib/supabase';
+import {
+  beginFirstTurn,
+  beginNextRound,
+  beginNextTurn,
+} from '@/lib/state'; import { supabase } from '@/lib/supabase';
 import type { Card, GameRow, GameState, Player } from '@/lib/types';
 import { formatTime } from '@/lib/utils';
 
@@ -122,6 +125,35 @@ export default function GamePage() {
     if (!game) return;
     const saved = await saveGameState(game, next);
     setGame(saved);
+  }
+
+  async function startInitialGame() {
+    if (
+      !state ||
+      !game ||
+      !room ||
+      phase !== 'GAME_READY' ||
+      busy ||
+      userId !== room.host_user_id
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+
+    try {
+      const nextState = beginFirstTurn(state);
+      await persist(nextState);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Неуспешно стартиране на играта.',
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function markTurnEnded() {
@@ -388,6 +420,109 @@ export default function GamePage() {
   const roundStarterTeam = state.teams.find((item) => item.id === roundStarterTeamId);
   const isCurrentTeamMember = Boolean(mePlayer && team.playerIds.includes(mePlayer.id));
 
+  if (phase === 'GAME_READY') {
+    const isHost = room.host_user_id === userId;
+
+    return (
+      <AppShell>
+        <section className="mx-auto max-w-5xl px-4 py-10">
+
+          <div className="rounded-[2.5rem] bg-gradient-to-br from-violet-700 via-fuchsia-600 to-orange-500 p-1 shadow-2xl">
+
+            <div className="rounded-[2.3rem] bg-white p-7 text-center sm:p-12">
+
+              <div className="text-7xl">🎉</div>
+
+              <h1 className="mt-5 text-4xl font-black text-slate-950 sm:text-6xl">
+                {t('gameReadyTitle')}
+              </h1>
+
+              <p className="mx-auto mt-4 max-w-xl text-base font-semibold text-slate-500">
+                {t('gameReadyDescription')}
+              </p>
+
+              <div className="mt-8 rounded-3xl bg-violet-50 p-5">
+
+                <div className="text-sm font-black uppercase tracking-wider text-violet-600">
+                  {t('round')} 1
+                </div>
+
+                <div className="mt-2 text-2xl font-black text-slate-900">
+                  {t('roundExplanation')}
+                </div>
+
+                <div className="mt-2 font-bold text-slate-500">
+                  ⏱ 60 seconds
+                </div>
+
+                <div className="mt-2 font-semibold text-slate-500">
+                  {state.allCards.length} {t('cardsInGame')}
+                </div>
+
+              </div>
+
+              <div className="mt-8 text-left">
+
+                <h2 className="mb-4 text-xl font-black text-slate-900">
+                  🏆 {t('teams')}
+                </h2>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+
+                  {state.teams.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className={`rounded-2xl bg-gradient-to-r ${item.color} p-5 text-white shadow-lg`}
+                    >
+                      <div className="text-lg font-black">
+                        {item.name}
+                      </div>
+
+                      <div className="mt-2 text-sm font-semibold opacity-90">
+                        {names(players, item.playerIds)}
+                      </div>
+
+                      {index === 0 && (
+                        <div className="mt-3 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-black">
+                          Първи на ред
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                </div>
+
+              </div>
+
+              {isHost ? (
+                <button
+                  onClick={() => void startInitialGame()}
+                  disabled={busy}
+                  className="mt-10 w-full rounded-2xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500 px-8 py-6 text-2xl font-black text-white shadow-xl transition hover:scale-[1.02] disabled:opacity-50"
+                >
+                  <Play className="mr-2 inline" size={25} />
+                  {busy ? t('starting') : t('startGame')}
+                </button>
+              ) : (
+                <div className="mt-10 rounded-2xl bg-amber-50 px-5 py-5 font-black text-amber-700">
+                  ⏳ {t('waitingForHostStart')}
+                </div>
+              )}
+
+            </div>
+          </div>
+
+          {error && (
+            <div className="mt-5 rounded-2xl bg-rose-50 p-4 font-bold text-rose-600">
+              {error}
+            </div>
+          )}
+
+        </section>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <section className="mx-auto max-w-7xl px-3 pb-10 pt-2 sm:px-6">
@@ -486,7 +621,7 @@ export default function GamePage() {
                 <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-white"><div className="font-black text-lg">{t('yourTeam')} {team.name}</div><div className="text-sm font-semibold text-white/70">{isCurrentTeamMember ? t('startYourTurnHint') : t('waitingNextTeamStart', { team: team.name })}</div></div>
-                    <button onClick={startNextTeamTurn} disabled={!isCurrentTeamMember || busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{isCurrentTeamMember ? t('startTurn') : t('waiting')}</button>
+                    <button onClick={startNextTeamTurn} disabled={!isCurrentTeamMember || busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18} />{isCurrentTeamMember ? t('startTurn') : t('waiting')}</button>
                   </div>
                 </div>
               )}
@@ -495,7 +630,7 @@ export default function GamePage() {
                 <div className="relative z-10 mt-5 rounded-[1.5rem] bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-white"><div className="font-black text-lg">{t('nextRound')} {Math.min(3, state.round + 1)}</div><div className="text-sm font-semibold text-white/70">{state.bonusTimeSeconds > 0 ? `${roundStarterTeam?.name ?? team.name} ${language === 'en' ? `gets ${state.bonusTimeSeconds}s of bonus time for the first turn only.` : `получава ${state.bonusTimeSeconds} сек. бонус само за първия си ход.`}` : t('everyTurn60')}</div></div>
-                    <button onClick={startNextRound} disabled={!roundStarterTeam?.playerIds.includes(mePlayer?.id ?? '') || busy || state.round >= 3} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18}/>{roundStarterTeam?.playerIds.includes(mePlayer?.id ?? '') ? t('startRound') : t('waiting')}</button>
+                    <button onClick={startNextRound} disabled={!roundStarterTeam?.playerIds.includes(mePlayer?.id ?? '') || busy || state.round >= 3} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3 font-black text-slate-950 disabled:opacity-40"><Play size={18} />{roundStarterTeam?.playerIds.includes(mePlayer?.id ?? '') ? t('startRound') : t('waiting')}</button>
                   </div>
                 </div>
               )}
